@@ -405,7 +405,18 @@ namespace DataMigration.Services
             foreach (var (id, data) in batch)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                string fileName = $"{id}_{Guid.NewGuid():N}.bin";
+                // Fetch file_name from pr_attachments
+                string fileNameFromDb = null;
+                var selectFileNameSql = "SELECT file_name FROM pr_attachments WHERE pr_attachment_id = @id LIMIT 1;";
+                await using (var selectCmd = new NpgsqlCommand(selectFileNameSql, pgConn))
+                {
+                    selectCmd.Parameters.AddWithValue("@id", NpgsqlDbType.Bigint, id);
+                    var result = await selectCmd.ExecuteScalarAsync(cancellationToken);
+                    fileNameFromDb = result != null && result != DBNull.Value ? result.ToString() : id.ToString();
+                }
+
+                var guid = Guid.NewGuid().ToString();
+                string fileName = $"{guid}_{fileNameFromDb}";
                 string s3Path = $"{folderPath}/{fileName}";
                 try
                 {
@@ -415,10 +426,10 @@ namespace DataMigration.Services
                         Helpers.S3bucket.UploadFile(ms, folderPath, fileName);
                     }
                     // Save only the S3 path (not full URL) in the DB
-                    var updateSql = @"UPDATE pr_attachments SET upload_path = @uploadPath, modified_date = CURRENT_TIMESTAMP WHERE pr_attachment_id = @id;";
+                    var updateSql = @"UPDATE pr_attachments SET upload_path = @s3Path, modified_date = CURRENT_TIMESTAMP WHERE pr_attachment_id = @id;";
                     await using var updateCmd = new NpgsqlCommand(updateSql, pgConn);
-                    updateCmd.Parameters.AddWithValue("@uploadPath", NpgsqlTypes.NpgsqlDbType.Text, s3Path);
-                    updateCmd.Parameters.AddWithValue("@id", NpgsqlTypes.NpgsqlDbType.Bigint, id);
+                    updateCmd.Parameters.AddWithValue("@s3Path", NpgsqlDbType.Text, s3Path);
+                    updateCmd.Parameters.AddWithValue("@id", NpgsqlDbType.Bigint, id);
                     await updateCmd.ExecuteNonQueryAsync(cancellationToken);
                     status.ProcessedFiles++;
                     updatedCount++;
