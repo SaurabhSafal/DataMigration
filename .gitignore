@@ -809,3 +809,6 @@ appsettings.json
 appsettings.json
 appsettings.Development.json
 .env
+appsettings.json
+appsettings.Development.json
+.env
