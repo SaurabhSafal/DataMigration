@@ -390,7 +390,7 @@ namespace DataMigration.Services
         }
 
         private async Task ProcessBinaryBatchParallelAsync(
-            NpgsqlConnection pgConn, // Not used for S3, kept for signature compatibility
+            NpgsqlConnection pgConn,
             List<(long id, byte[] data)> batch,
             int batchIndex,
             int totalBatches,
@@ -400,32 +400,39 @@ namespace DataMigration.Services
             var batchStart = DateTime.UtcNow;
             _logger.LogInformation($"Processing batch {batchIndex + 1}/{totalBatches} ({batch.Count} files)...");
 
-            // Dummy file content for testing
-            byte[] dummyContent = System.Text.Encoding.UTF8.GetBytes("This is a dummy file for S3 upload test.");
             string folderPath = "prattachment"; // You can make this optional or parameterized
-            string fileName = $"dummy_{Guid.NewGuid():N}.txt";
-
-            using (var ms = new MemoryStream(dummyContent))
+            int updatedCount = 0;
+            foreach (var (id, data) in batch)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                string fileName = $"{id}_{Guid.NewGuid():N}.bin";
+                string s3Path = $"{folderPath}/{fileName}";
                 try
                 {
-                    // Upload dummy file to S3
-                    string s3Url = Helpers.S3bucket.UploadFile(ms, folderPath, fileName);
-                    _logger.LogInformation($"Dummy file uploaded to S3: {s3Url}");
+                    using (var ms = new MemoryStream(data))
+                    {
+                        // Upload to S3
+                        Helpers.S3bucket.UploadFile(ms, folderPath, fileName);
+                    }
+                    // Save only the S3 path (not full URL) in the DB
+                    var updateSql = @"UPDATE pr_attachments SET upload_path = @uploadPath, modified_date = CURRENT_TIMESTAMP WHERE pr_attachment_id = @id;";
+                    await using var updateCmd = new NpgsqlCommand(updateSql, pgConn);
+                    updateCmd.Parameters.AddWithValue("@uploadPath", NpgsqlTypes.NpgsqlDbType.Text, s3Path);
+                    updateCmd.Parameters.AddWithValue("@id", NpgsqlTypes.NpgsqlDbType.Bigint, id);
+                    await updateCmd.ExecuteNonQueryAsync(cancellationToken);
+                    status.ProcessedFiles++;
+                    updatedCount++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to upload dummy file to S3");
+                    _logger.LogError(ex, $"Failed to upload or update DB for PR_ATTACHMENT_ID={id}");
                 }
+                status.ProgressPercentage = status.TotalFiles > 0 ? (int)((double)status.ProcessedFiles / status.TotalFiles * 100) : 0;
+                await NotifyStatusUpdate(status);
             }
 
-            // Simulate progress update for test
-            status.ProcessedFiles++;
-            status.ProgressPercentage = 100;
-            await NotifyStatusUpdate(status);
-
             var batchDuration = (DateTime.UtcNow - batchStart).TotalSeconds;
-            _logger.LogInformation($"✓ Dummy S3 upload batch {batchIndex + 1}/{totalBatches} complete in {batchDuration:F1}s");
+            _logger.LogInformation($"✓ S3 upload batch {batchIndex + 1}/{totalBatches} complete: {updatedCount} files in {batchDuration:F1}s");
         }
 
         private async Task NotifyStatusUpdate(BinaryMigrationStatus status)

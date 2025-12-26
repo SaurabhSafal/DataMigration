@@ -57,16 +57,20 @@ ORDER BY t.PRATTACHMENTID;";
     // Optimized query for metadata only (no binary column)
     private string SelectMetadataQuery => @"
         SELECT 
-            t.PRATTACHMENTID,
-            TBL_PRTRANSACTION.PRTRANSID as PRID,
-            t.UPLOADPATH,
-            t.FILENAME,
-            t.UPLOADEDBYID,
-            t.Remarks,
-            t.PR_ATTCHMNT_TYPE
-        FROM TBL_PRATTACHMENT t
-        Inner Join TBL_PRTRANSACTION on TBL_PRTRANSACTION.PRID = t.PRID
-        ORDER BY t.PRATTACHMENTID";
+    t.PRATTACHMENTID,
+    TBL_PRTRANSACTION.PRTRANSID AS PRID,
+    CASE 
+        WHEN t.PRATTACHMENTDATA IS NULL THEN  t.UPLOADPATH 
+        ELSE NULL
+    END AS UPLOADPATH,
+    t.FILENAME,
+    t.UPLOADEDBYID,
+    t.Remarks,
+    t.PR_ATTCHMNT_TYPE
+FROM TBL_PRATTACHMENT t
+INNER JOIN TBL_PRTRANSACTION
+    ON TBL_PRTRANSACTION.PRID = t.PRID
+ORDER BY t.PRATTACHMENTID;";
 
     // Required by base class MigrationService
     protected override string InsertQuery => @"
