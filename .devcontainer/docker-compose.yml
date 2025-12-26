@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  datamigration:
+    command: dotnet watch run --urls http://0.0.0.0:8080
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+    volumes:
+      - ..:/app

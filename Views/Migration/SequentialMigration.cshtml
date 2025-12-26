@@ -1,0 +1,1502 @@
+@{
+    ViewData["Title"] = "Sequential Migration Executor";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sequential Migration Executor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 30px;
+            min-height: calc(100vh - 200px);
+        }
+
+        .panel {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .panel-header h2 {
+            color: #333;
+            font-size: 1.8em;
+        }
+
+        .panel-header .badge {
+            background: #667eea;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+
+        .control-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .btn-pause {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            color: white;
+        }
+
+        .btn-download {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-overview {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .progress-stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .stat-card.success {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        .stat-card.error {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+
+        .stat-card.pending {
+            background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%);
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .progress-bar-container {
+            background: #e9ecef;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #11998e 0%, #38ef7d 100%);
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .timeline-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            position: relative;
+            padding-left: 40px;
+        }
+
+        .timeline-item:not(:last-child)::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 35px;
+            width: 2px;
+            height: calc(100% + 10px);
+            background: #dee2e6;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            left: 0;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: white;
+            z-index: 1;
+        }
+
+        .timeline-marker.pending {
+            background: #6c757d;
+        }
+
+        .timeline-marker.running {
+            background: #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
+        .timeline-marker.success {
+            background: #28a745;
+        }
+
+        .timeline-marker.error {
+            background: #dc3545;
+        }
+
+        @@keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .timeline-content {
+            flex: 1;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .timeline-content.success {
+            border-left-color: #28a745;
+        }
+
+        .timeline-content.error {
+            border-left-color: #dc3545;
+        }
+
+        .timeline-content.running {
+            border-left-color: #ffc107;
+        }
+
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .timeline-title {
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #333;
+        }
+
+        .timeline-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .timeline-status.pending {
+            background: #e9ecef;
+            color: #6c757d;
+        }
+
+        .timeline-status.running {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .timeline-status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .timeline-status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .timeline-details {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 8px;
+        }
+
+        .timeline-time {
+            font-size: 0.85em;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .documentation-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 800px;
+            overflow-y: auto;
+        }
+
+        .doc-section {
+            margin-bottom: 25px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .doc-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .doc-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .doc-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        .doc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .doc-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .doc-table tr:hover {
+            background: #f1f3f5;
+        }
+
+        .log-entry {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .log-entry.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .log-entry.success {
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+
+        .log-entry.warning {
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+
+        .log-entry.error {
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+
+        .log-timestamp {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @@keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container" style="margin-bottom: 20px; margin-top: 20px; padding: 20px;">
+        <div style="margin-bottom: 20px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <a href="/Migration" class="btn btn-download" style="min-width:180px; font-size:1.0em;">
+                🏠 Back to Dashboard
+            </a>
+            <a href="/Migration/BinaryAttachmentMigration" class="btn btn-start" style="min-width:280px; font-size:1.0em;">
+                📎 Binary Attachment Migration
+            </a>
+        </div>
+        <div class="header">
+            <h1>🚀 Sequential Migration Executor</h1>
+            <p>Automated Database Migration Pipeline - 93 Tables</p>
+        </div>
+
+        <div class="main-content">
+            <!-- Left Panel: Control & Timeline -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Migration Control</h2>
+                    <span class="badge" id="statusBadge">Ready</span>
+                </div>
+
+                <div class="control-section">
+                    <div style="margin-bottom: 15px;">
+                        <label for="startTableSelect" style="font-weight:bold;">Start Migration From Table:</label>
+                        <select id="startTableSelect" style="margin-left:10px; padding:6px 12px; border-radius:6px;">
+                            <!-- Options will be populated by JS -->
+                        </select>
+                    </div>
+                    <div class="control-buttons">
+                        <button class="btn btn-start" id="btnStart" onclick="startMigration()">
+                            ▶ Start Migration
+                        </button>
+                        <button class="btn btn-pause" id="btnPause" onclick="pauseMigration()" disabled>
+                            ⏸ Pause
+                        </button>
+                        <button class="btn btn-stop" id="btnStop" onclick="stopMigration()" disabled>
+                            ⏹ Stop
+                        </button>
+                        <button class="btn" id="btnReset" onclick="resetMigration()" 
+                                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            🔄 Reset
+                        </button>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <button class="btn btn-download" id="btnDownload" onclick="downloadExcelReport()" disabled style="width: 100%;">
+                            📊 Download Excel Report
+                        </button>
+                    </div>
+                    <div style="margin-top: 10px; display: flex; gap: 10px;">
+                        <button class="btn" id="btnSeedData" onclick="runSeedData()" 
+                                style="flex: 1; background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                            🌱 Run Seed Data
+                        </button>
+                        <button class="btn" id="btnTruncate" onclick="truncateDatabase()" 
+                                style="flex: 1; background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white;">
+                            🗑️ Truncate Database
+                        </button>
+                    </div>
+                </div>
+
+                <div class="progress-overview">
+                    <div class="progress-stats">
+                        <div class="stat-card">
+                            <div class="stat-number" id="totalCount">93</div>
+                            <div class="stat-label">Total Tables</div>
+                        </div>
+                        <div class="stat-card success">
+                            <div class="stat-number" id="completedCount">0</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                        <div class="stat-card error">
+                            <div class="stat-number" id="failedCount">0</div>
+                            <div class="stat-label">Failed</div>
+                        </div>
+                        <div class="stat-card pending">
+                            <div class="stat-number" id="pendingCount">93</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+                    </div>
+                </div>
+
+                <div class="timeline-container" id="timelineContainer">
+                    <!-- Timeline items will be populated here -->
+                </div>
+            </div>
+
+            <!-- Right Panel: Live Documentation -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Live Documentation</h2>
+                    <span class="badge" id="docBadge">Real-time</span>
+                </div>
+
+                <div class="doc-section" style="margin-bottom: 25px;">
+                    <h3>📊 Migration Summary</h3>
+                    <table class="doc-table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="summaryTable">
+                            <tr>
+                                <td>Start Time</td>
+                                <td id="startTime">-</td>
+                            </tr>
+                            <tr>
+                                <td>End Time</td>
+                                <td id="endTime">-</td>
+                            </tr>
+                            <tr>
+                                <td>Duration</td>
+                                <td id="duration">-</td>
+                            </tr>
+                            <tr>
+                                <td>Total Records Migrated</td>
+                                <td id="totalRecords">0</td>
+                            </tr>
+                            <tr>
+                                <td>Average Speed</td>
+                                <td id="avgSpeed">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <hr style="border: 0; border-top: 2px solid #667eea; margin: 24px 0;">
+
+                <div class="doc-section" style="margin-bottom: 25px;">
+                    <h3>📈 Detailed Results</h3>
+                    <div id="detailedResults" style="max-height: 700px; overflow-y: auto;">
+                        <table class="doc-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Table Name</th>
+                                    <th>Status</th>
+                                    <th>Records Inserted</th>
+                                    <th>Records Skipped</th>
+                                    <th>Total</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsTable">
+                                <!-- Will be populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                </div>
+            </div>
+        </div>
+                                    <div class="doc-section " style="margin-top: 25px;">
+                        <h3>📝 Live Logs</h3>
+                        <div id="liveLog">
+                            <div class="log-entry info">
+                                <span class="log-timestamp">[READY]</span>
+                                <span>System initialized and ready to start migration...</span>
+                            </div>
+                        </div>
+                    </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+    <script>
+        // Migration configuration - maps display names to API table names
+        const migrations = [
+            { display: 'CompanyMaster', api: 'companymaster' },
+            { display: 'Users', api: 'users' },
+            { display: 'ValuationType', api: 'valuationtype' },
+            { display: 'Country', api: 'country' },
+            { display: 'Currency', api: 'currency' },
+            { display: 'Incoterm', api: 'incoterm' },
+            { display: 'MaterialGroup', api: 'materialgroup' },
+            { display: 'PaymentTerm', api: 'paymentterm' },
+            { display: 'Plant', api: 'plant' },
+            { display: 'PurchaseGroup', api: 'purchasegroup' },
+            { display: 'PODocType', api: 'podoctype' },
+            { display: 'POCondition', api: 'pocondition' },
+            { display: 'PurchaseOrganization', api: 'purchaseorganization' },
+            { display: 'TaxCode', api: 'taxcodemaster' },
+            { display: 'Tax', api: 'tax' },
+            { display: 'UOM', api: 'uom' },
+            { display: 'PriceBidCharges', api: 'pricebidchargesmaster' },
+            { display: 'TermMaster', api: 'termmaster' },
+            { display: 'TermTemplate', api: 'termtemplatemaster' },
+            { display: 'TypeOfCategory', api: 'typeofcategory' },
+            { display: 'UserCompany', api: 'usercompanymaster' },
+            { display: 'Workflow', api: 'workflow' },
+            { display: 'WorkflowHistory', api: 'workflowhistory' },
+            { display: 'WorkflowAmount', api: 'workflowamount' },
+            { display: 'WorkflowAmountHistory', api: 'workflowamounthistory' },
+            { display: 'WorkflowApprovalUser', api: 'workflowapprovaluser' },
+            { display: 'WorkflowApprovalUserHistory', api: 'workflowapprovaluserhistory' },
+            { display: 'ERPCurrencyExchange', api: 'erpcurrencyexchangerate' },
+            { display: 'Material', api: 'material' },
+            { display: 'SupplierGroup', api: 'suppliergroup' },
+            { display: 'Supplier', api: 'supplier' },
+            { display: 'SupplierInactive', api: 'supplierinactive' },
+            { display: 'SupplierOtherContact', api: 'supplierothercontact' },
+            { display: 'SupplierPaymentIncoterm', api: 'supplierpaymentincoterm' },
+            { display: 'SupplierBankDetails', api: 'supplierbankdetails' },
+            { display: 'ERPPRLines', api: 'erpprlines' },
+            { display: 'PRBoqItems', api: 'prboqitems' },
+            { display: 'PRAttachment', api: 'prattachment' },
+            { display: 'EventMaster', api: 'eventmaster' },
+            { display: 'EventSetting', api: 'eventsetting' },
+            { display: 'EventItems', api: 'eventitems' },
+            { display: 'EventBoqItems', api: 'eventboqitems' },
+            { display: 'EventSchedule', api: 'eventschedule' },
+            { display: 'EventScheduleHistory', api: 'eventschedulehistory' },
+            { display: 'AuctionMinMaxTarget', api: 'auctionminmaxtargetprice' },
+            { display: 'SourceList', api: 'sourcelistmaster' },
+            { display: 'EventCollaboration', api: 'eventcollaboration' },
+            { display: 'AssignedEventVendor', api: 'assignedeventvendor' },
+            { display: 'EventFreezeCurrency', api: 'eventfreezecurrency' },
+            { display: 'EventPriceBidColumns', api: 'eventpricebidcolumns' },
+            { display: 'TechnicalDocuments', api: 'technicaldocuments' },
+            { display: 'TechnicalParameterTemplate', api: 'technicalparametertemplate' },
+            { display: 'UserTerm', api: 'userterm' },
+            { display: 'UserTechnicalParameter', api: 'usertechnicalparameter' },
+            { display: 'TechnicalApprovalWorkflow', api: 'technicalapprovalworkflow' },
+            { display: 'TechnicalApprovalScore', api: 'technicalapprovalscore' },
+            { display: 'TechnicalApprovalScoreHistory', api: 'technicalapprovalscorehistory' },
+            { display: 'UserPriceBidLotCharges', api: 'userpricebidlotcharges' },
+            { display: 'UserPriceBidNonPricing', api: 'userpricebidnonpricing' },
+            { display: 'EventPublish', api: 'eventpublish' },
+            { display: 'EventCommunicationSender', api: 'eventcommunicationsender' },
+            { display: 'EventCommunicationReceiver', api: 'eventcommunicationreceiver' },
+            { display: 'EventCommunicationAttachment', api: 'eventcommunicationattachment' },
+            { display: 'SupplierPriceBidLotPrice', api: 'supplierpricebidlotprice' },
+            { display: 'EventSupplierPriceBid', api: 'eventsupplierpricebid' },
+            { display: 'EventSupplierLineItem', api: 'eventsupplierlineitem' },
+            { display: 'SupplierPriceBidNonPricing', api: 'supplierpricebidnonpricing' },
+            { display: 'SupplierPriceBoqItems', api: 'supplierpriceboqitems' },
+            { display: 'SupplierPriceBidLotCharges', api: 'supplierpricebidlotcharges' },
+            { display: 'SupplierPriceBidDocument', api: 'supplierpricebiddocument' },
+            { display: 'SupplierEventPriceBidColumns', api: 'suppliereventpricebidcolumns' },
+            { display: 'SupplierTechnicalParameter', api: 'suppliertechnicalparameter' },
+            { display: 'SupplierTerms', api: 'supplierterms' },
+            { display: 'SupplierTermDeviations', api: 'suppliertermdeviations' },
+            { display: 'NFAHeader', api: 'nfaheader' },
+            { display: 'NFALine', api: 'nfaline' },
+            { display: 'NFALotCharges', api: 'nfalotcharges' },
+            { display: 'NFABoqItems', api: 'nfaboqitems' },
+            { display: 'NFAAttachments', api: 'nfaattachments' },
+            { display: 'NFAClarification', api: 'nfaclarification' },
+            { display: 'NFAPOCondition', api: 'nfapocondition' },
+            { display: 'NFAWorkflow', api: 'nfaworkflow' },
+            { display: 'POHeader', api: 'poheader' },
+            { display: 'POLine', api: 'poline' },
+            { display: 'ARCMain', api: 'arcmain' },
+            { display: 'ARCSub', api: 'arcsub' },
+            { display: 'ARCPlant', api: 'arcplant' },
+            { display: 'ARCAttachment', api: 'arcattachment' },
+            { display: 'ARCApprovalAuthority', api: 'arcapprovalauthority' },
+            { display: 'WorkflowHistoryTable', api: 'workflowhistorytable' },
+            { display: 'UserPlantMaterialGroup', api: 'userplantmaterialgroupbatchinsert' },
+            { display: 'UserPlantPurchaseGroup', api: 'userplantpurchasegroupbatchinsert' },
+            { display: 'DynamicTableLabelsSeedService', api: 'dynamictablelabels' },
+            { display: 'ResetAllSequences', api: 'resetsequences' }
+        ];
+
+        let currentIndex = 0;
+        let isPaused = false;
+        let isStopped = false;
+        let startTime = null;
+        let migrationResults = [];
+        let connection = null;
+        
+        // Console log capture
+        let consoleLogBuffer = [];
+        const originalConsoleLog = console.log;
+        const originalConsoleError = console.error;
+        const originalConsoleWarn = console.warn;
+        
+        // Override console methods to capture logs
+        console.log = function(...args) {
+            consoleLogBuffer.push({
+                type: 'log',
+                message: args.join(' '),
+                timestamp: new Date().toISOString()
+            });
+            originalConsoleLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            consoleLogBuffer.push({
+                type: 'error',
+                message: args.join(' '),
+                timestamp: new Date().toISOString()
+            });
+            originalConsoleError.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            consoleLogBuffer.push({
+                type: 'warn',
+                message: args.join(' '),
+                timestamp: new Date().toISOString()
+            });
+            originalConsoleWarn.apply(console, args);
+        };
+        
+        // Local storage keys
+        const STORAGE_KEYS = {
+            RESULTS: 'migrationResults',
+            CURRENT_INDEX: 'currentMigrationIndex',
+            START_TIME: 'migrationStartTime',
+            STATUS: 'migrationStatus'
+        };
+
+        // Initialize SignalR
+        async function initializeSignalR() {
+            connection = new signalR.HubConnectionBuilder()
+                .withUrl("/migrationProgressHub")
+                .build();
+
+            connection.on("ReceiveProgress", (message) => {
+                addLog(message, 'info');
+            });
+
+            try {
+                await connection.start();
+                addLog("Connected to migration hub", 'success');
+            } catch (err) {
+                addLog("Error connecting to hub: " + err, 'error');
+            }
+        }
+
+        // Storage functions
+        function saveMigrationState() {
+            localStorage.setItem(STORAGE_KEYS.RESULTS, JSON.stringify(migrationResults));
+            localStorage.setItem(STORAGE_KEYS.CURRENT_INDEX, currentIndex.toString());
+            localStorage.setItem(STORAGE_KEYS.START_TIME, startTime ? startTime.toISOString() : '');
+            localStorage.setItem(STORAGE_KEYS.STATUS, isPaused ? 'paused' : (isStopped ? 'stopped' : 'running'));
+        }
+
+        function loadMigrationState() {
+            const savedResults = localStorage.getItem(STORAGE_KEYS.RESULTS);
+            const savedIndex = localStorage.getItem(STORAGE_KEYS.CURRENT_INDEX);
+            const savedStartTime = localStorage.getItem(STORAGE_KEYS.START_TIME);
+            const savedStatus = localStorage.getItem(STORAGE_KEYS.STATUS);
+
+            if (savedResults) {
+                migrationResults = JSON.parse(savedResults);
+                updateStatistics();
+                
+                // Rebuild timeline based on saved results
+                migrationResults.forEach((result, index) => {
+                    updateTimelineItem(index, result.status, result.details, result.time);
+                    if (result.status === 'success') {
+                        addResultRow(index + 1, result.table, 'Success', result.records, result.duration);
+                    } else if (result.status === 'error') {
+                        addResultRow(index + 1, result.table, 'Failed', 0, result.duration);
+                    }
+                });
+            }
+
+            if (savedIndex) {
+                currentIndex = parseInt(savedIndex);
+            }
+
+            if (savedStartTime && savedStartTime !== '') {
+                startTime = new Date(savedStartTime);
+                document.getElementById('startTime').textContent = startTime.toLocaleString();
+            }
+
+            if (savedStatus === 'paused') {
+                isPaused = true;
+                document.getElementById('statusBadge').textContent = 'Paused';
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('btnPause').disabled = true;
+                addLog('Migration state restored: Paused', 'warning');
+            } else if (savedStatus === 'stopped') {
+                isStopped = true;
+                document.getElementById('statusBadge').textContent = 'Stopped';
+                addLog('Migration state restored: Stopped', 'info');
+            }
+        }
+
+        function clearMigrationState() {
+            localStorage.removeItem(STORAGE_KEYS.RESULTS);
+            localStorage.removeItem(STORAGE_KEYS.CURRENT_INDEX);
+            localStorage.removeItem(STORAGE_KEYS.START_TIME);
+            localStorage.removeItem(STORAGE_KEYS.STATUS);
+        }
+
+        // Initialize timeline
+        function initializeTimeline() {
+            const container = document.getElementById('timelineContainer');
+            container.innerHTML = '';
+
+            migrations.forEach((migration, index) => {
+                const item = document.createElement('div');
+                item.className = 'timeline-item';
+                item.id = `timeline-${index}`;
+                item.innerHTML = `
+                    <div class="timeline-marker pending">${index + 1}</div>
+                    <div class="timeline-content">
+                        <div class="timeline-header">
+                            <div class="timeline-title">${migration.display}</div>
+                            <div class="timeline-status pending" id="status-${index}">Pending</div>
+                        </div>
+                        <div class="timeline-details" id="details-${index}">Waiting to start...</div>
+                        <div class="timeline-time" id="time-${index}"></div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        // Start migration
+        async function startMigration() {
+            // Get selected table index
+            const select = document.getElementById('startTableSelect');
+            const selectedIndex = select ? parseInt(select.value) : 0;
+            if (!isNaN(selectedIndex) && selectedIndex >= 0 && selectedIndex < migrations.length) {
+                currentIndex = selectedIndex;
+            }
+            if ((currentIndex === 0 || currentIndex === selectedIndex) && !startTime) {
+                startTime = new Date();
+                document.getElementById('startTime').textContent = startTime.toLocaleString();
+                clearMigrationState(); // Clear old state when starting fresh
+            }
+
+            isPaused = false;
+            isStopped = false;
+
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnPause').disabled = false;
+            document.getElementById('btnStop').disabled = false;
+            document.getElementById('btnDownload').disabled = false;
+            document.getElementById('statusBadge').textContent = 'Running';
+
+            if (currentIndex === 0) {
+                addLog('Starting sequential migration...', 'success');
+            } else {
+                addLog(`Starting migration from table ${currentIndex + 1} (${migrations[currentIndex].display})/${migrations.length}...`, 'success');
+            }
+
+            await executeNextMigration();
+        }
+
+        // Pause migration
+        function pauseMigration() {
+            isPaused = true;
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+            document.getElementById('statusBadge').textContent = 'Paused';
+            saveMigrationState();
+            addLog('Migration paused', 'warning');
+        }
+
+        // Stop migration
+        function stopMigration() {
+            isStopped = true;
+            isPaused = false;
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('statusBadge').textContent = 'Stopped';
+            saveMigrationState();
+            addLog('Migration stopped by user', 'error');
+        }
+
+        // Execute next migration
+        async function executeNextMigration() {
+            if (isStopped || currentIndex >= migrations.length) {
+                completeMigration();
+                return;
+            }
+
+            if (isPaused) {
+                return;
+            }
+
+            const migration = migrations[currentIndex];
+            const startMigTime = new Date();
+            
+            // Clear console buffer for this migration
+            consoleLogBuffer = [];
+
+            // Update UI
+            updateTimelineItem(currentIndex, 'running', 'Migrating...', '');
+
+            addLog(`Starting migration: ${migration.display}`, 'info');
+
+            try {
+                // Call the migration API with correct endpoint
+                const response = await fetch('/Migration/MigrateAsync', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        table: migration.api,
+                        mappings: []
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const endMigTime = new Date();
+                const duration = ((endMigTime - startMigTime) / 1000).toFixed(2);
+
+                if (result.success) {
+                    // Extract record count - handle both formats
+                    let recordCount = 0;
+                    let skippedCount = 0;
+                    let insertedCount = 0;
+                    let detailMessage = result.message;
+                    let tableLogs = []; // Store table-specific logs
+                    
+                    // Check if result has details object (for EventMaster and similar)
+                    if (result.details) {
+                        if (result.details.successCount !== undefined) {
+                            recordCount = result.details.successCount;
+                            insertedCount = result.details.successCount;
+                            skippedCount = result.details.failedCount || 0;
+                            detailMessage = `Success: ${result.details.successCount}, Failed: ${result.details.failedCount || 0}`;
+                        } else if (result.details.inserted !== undefined) {
+                            // New format with detailed logs
+                            insertedCount = result.details.inserted || 0;
+                            skippedCount = result.details.skipped || 0;
+                            recordCount = insertedCount;
+                            detailMessage = `Inserted: ${insertedCount}, Skipped: ${skippedCount}`;
+                        }
+                    } else {
+                        // Extract from message
+                        recordCount = extractRecordCount(result.message);
+                        insertedCount = recordCount;
+                        
+                        // Try to extract skipped count if present
+                        const skippedMatch = result.message.match(/skipped[:\s]+(\d+)/i);
+                        if (skippedMatch) {
+                            skippedCount = parseInt(skippedMatch[1]);
+                        }
+                    }
+                    
+                    // Capture console logs from API response
+                    if (result.consoleOutput && typeof result.consoleOutput === 'string') {
+                        // Parse console output into individual log lines
+                        const consoleLines = result.consoleOutput.split('\n').filter(line => line.trim().length > 0);
+                        tableLogs = consoleLines.map(line => ({
+                            message: line,
+                            timestamp: new Date().toISOString()
+                        }));
+                        
+                        // Add first few lines to UI log for visibility
+                        consoleLines.slice(0, 5).forEach(line => {
+                            addLog(`[${migration.display} Console] ${line}`, 'info');
+                        });
+                        
+                        if (consoleLines.length > 5) {
+                            addLog(`[${migration.display}] ... and ${consoleLines.length - 5} more console logs (see Excel export)`, 'info');
+                        }
+                    } else {
+                        // Use captured browser console logs if API doesn't return console output
+                        tableLogs = consoleLogBuffer.map(log => ({
+                            message: `[${log.type.toUpperCase()}] ${log.message}`,
+                            timestamp: log.timestamp
+                        }));
+                        
+                        console.log(`Captured ${tableLogs.length} console logs for ${migration.display}`);
+                    }
+                    
+                    // Also capture logs if present (new format)
+                    if (result.logs && Array.isArray(result.logs)) {
+                        if (!tableLogs || tableLogs.length === 0) {
+                            tableLogs = result.logs;
+                        } else {
+                            // Merge both sources
+                            tableLogs = tableLogs.concat(result.logs.map(log => ({
+                                message: log.message || JSON.stringify(log),
+                                timestamp: log.timestamp || new Date().toISOString()
+                            })));
+                        }
+                        
+                        // Add logs to the log display (grouped format)
+                        result.logs.forEach(log => {
+                            const logLevel = log.level ? log.level.toLowerCase() : 'info';
+                            const logType = logLevel === 'error' ? 'error' : 
+                                          logLevel === 'warning' ? 'warning' : 
+                                          logLevel === 'debug' ? 'info' : 'info';
+                            
+                            // Format grouped log message
+                            let logMessage = '';
+                            if (log.recordCount && log.recordCount > 1) {
+                                // Multiple records - show range
+                                const idRange = getIdRange(log.recordIds);
+                                logMessage = `[${migration.display}] ${idRange} (${log.recordCount} records): ${log.message}`;
+                            } else {
+                                // Single record
+                                const recordId = log.recordIds && log.recordIds.length > 0 ? log.recordIds[0] : 'N/A';
+                                logMessage = `[${migration.display}] ${recordId}: ${log.message}`;
+                            }
+                            
+                            addLog(logMessage, logType);
+                        });
+                    }
+                    
+                    migrationResults.push({
+                        table: migration.display,
+                        apiName: migration.api,
+                        status: 'success',
+                        records: recordCount,
+                        insertedRecords: insertedCount,
+                        skippedRecords: skippedCount,
+                        duration: duration,
+                        details: detailMessage,
+                        time: new Date().toLocaleTimeString(),
+                        errorMessage: 'N/A',
+                        fullResponse: result,
+                        logs: tableLogs // Store logs for Excel export
+                    });
+
+                    updateTimelineItem(currentIndex, 'success', 
+                        `✓ Migrated ${insertedCount} records` + (skippedCount > 0 ? ` (Skipped: ${skippedCount})` : ''), 
+                        `Completed in ${duration}s`);
+
+                    addLog(`✓ ${migration.display}: ${detailMessage}`, 'success');
+                    addResultRow(currentIndex + 1, migration.display, 'Success', insertedCount, skippedCount, duration);
+                } else {
+                    migrationResults.push({
+                        table: migration.display,
+                        apiName: migration.api,
+                        status: 'error',
+                        records: 0,
+                        insertedRecords: 0,
+                        skippedRecords: 0,
+                        duration: duration,
+                        details: result.error || 'Unknown error',
+                        time: new Date().toLocaleTimeString(),
+                        errorMessage: result.error || 'Unknown error'
+                    });
+
+                    updateTimelineItem(currentIndex, 'error', 
+                        `✗ Error: ${result.error || 'Unknown error'}`, 
+                        `Failed after ${duration}s`);
+
+                    addLog(`✗ ${migration.display}: ${result.error || 'Unknown error'}`, 'error');
+                    addResultRow(currentIndex + 1, migration.display, 'Failed', 0, 0, duration);
+                }
+            } catch (error) {
+                const endMigTime = new Date();
+                const duration = ((endMigTime - startMigTime) / 1000).toFixed(2);
+
+                migrationResults.push({
+                    table: migration.display,
+                    apiName: migration.api,
+                    status: 'error',
+                    records: 0,
+                    insertedRecords: 0,
+                    skippedRecords: 0,
+                    duration: duration,
+                    details: error.message,
+                    time: new Date().toLocaleTimeString(),
+                    errorMessage: error.message
+                });
+
+                updateTimelineItem(currentIndex, 'error', 
+                    `✗ Error: ${error.message}`, 
+                    `Failed after ${duration}s`);
+
+                addLog(`✗ ${migration.display}: ${error.message}`, 'error');
+                addResultRow(currentIndex + 1, migration.display, 'Failed', 0, 0, duration);
+            }
+
+            // Save state after each migration
+            saveMigrationState();
+
+            // Update statistics
+            updateStatistics();
+
+            currentIndex++;
+
+            // Continue to next migration after a short delay
+            if (currentIndex < migrations.length && !isStopped && !isPaused) {
+                setTimeout(() => executeNextMigration(), 500);
+            } else if (currentIndex >= migrations.length) {
+                completeMigration();
+            }
+        }
+
+        // Helper function to extract record count from message
+        function extractRecordCount(message) {
+            const match = message.match(/(\d+)\s+records?\s+migrated/i);
+            return match ? parseInt(match[1]) : 0;
+        }
+
+        // Helper function to get ID range from record identifiers
+        function getIdRange(identifiers) {
+            if (!identifiers || identifiers.length === 0) return 'N/A';
+            if (identifiers.length === 1) return identifiers[0];
+            
+            // Try to extract numeric IDs
+            const numericIds = [];
+            const prefix = identifiers[0].split('=')[0];
+            
+            identifiers.forEach(id => {
+                const match = id.match(/(\d+)/);
+                if (match) {
+                    numericIds.push(parseInt(match[1]));
+                }
+            });
+            
+            if (numericIds.length > 0) {
+                numericIds.sort((a, b) => a - b);
+                const min = numericIds[0];
+                const max = numericIds[numericIds.length - 1];
+                
+                // Check if it's a continuous range
+                if (numericIds.length === max - min + 1) {
+                    return `${prefix}=${min}-${max}`;
+                } else {
+                    return `${prefix}=${min}...${max}`;
+                }
+            }
+            
+            return `${identifiers[0]}...${identifiers[identifiers.length - 1]}`;
+        }
+
+        // Update timeline item
+        function updateTimelineItem(index, status, details, time) {
+            const item = document.getElementById(`timeline-${index}`);
+            const marker = item.querySelector('.timeline-marker');
+            const content = item.querySelector('.timeline-content');
+            const statusBadge = item.querySelector('.timeline-status');
+            const detailsDiv = document.getElementById(`details-${index}`);
+            const timeDiv = document.getElementById(`time-${index}`);
+
+            marker.className = `timeline-marker ${status}`;
+            content.className = `timeline-content ${status}`;
+            statusBadge.className = `timeline-status ${status}`;
+            statusBadge.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            detailsDiv.textContent = details;
+            timeDiv.textContent = time;
+
+            // Scroll to current item
+            item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Update statistics
+        function updateStatistics() {
+            const completed = migrationResults.filter(r => r.status === 'success').length;
+            const failed = migrationResults.filter(r => r.status === 'error').length;
+            const pending = migrations.length - completed - failed;
+            const progress = Math.round((completed / migrations.length) * 100);
+            const totalRecords = migrationResults.reduce((sum, r) => sum + (r.insertedRecords || r.records || 0), 0);
+
+            document.getElementById('completedCount').textContent = completed;
+            document.getElementById('failedCount').textContent = failed;
+            document.getElementById('pendingCount').textContent = pending;
+            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('progressBar').textContent = progress + '%';
+            document.getElementById('totalRecords').textContent = totalRecords.toLocaleString();
+
+            if (startTime) {
+                const currentTime = new Date();
+                const durationSec = Math.floor((currentTime - startTime) / 1000);
+                const minutes = Math.floor(durationSec / 60);
+                const seconds = durationSec % 60;
+                document.getElementById('duration').textContent = `${minutes}m ${seconds}s`;
+
+                if (completed > 0 && durationSec > 0) {
+                    const avgSpeed = (totalRecords / durationSec).toFixed(2);
+                    document.getElementById('avgSpeed').textContent = `${avgSpeed} records/sec`;
+                }
+            }
+        }
+
+        // Add result row
+        function addResultRow(index, table, status, insertedRecords, skippedRecords, duration) {
+            const tbody = document.getElementById('resultsTable');
+            const row = document.createElement('tr');
+            
+            const statusColor = status === 'Success' ? '#28a745' : '#dc3545';
+            const totalRecords = insertedRecords + skippedRecords;
+            
+            row.innerHTML = `
+                <td>${index}</td>
+                <td><strong>${table}</strong></td>
+                <td style="color: ${statusColor}; font-weight: bold;">${status}</td>
+                <td>${insertedRecords.toLocaleString()}</td>
+                <td>${skippedRecords > 0 ? skippedRecords.toLocaleString() : '-'}</td>
+                <td>${totalRecords.toLocaleString()}</td>
+                <td>${duration}s</td>
+            `;
+            
+            tbody.appendChild(row);
+            
+            // Scroll to bottom of results
+            document.getElementById('detailedResults').scrollTop = document.getElementById('detailedResults').scrollHeight;
+        }
+
+        // Add log entry
+        function addLog(message, type = 'info') {
+            const logContainer = document.getElementById('liveLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<span class="log-timestamp">[${timestamp}]</span><span>${message}</span>`;
+            
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        // Complete migration
+        function completeMigration() {
+            const endTime = new Date();
+            document.getElementById('endTime').textContent = endTime.toLocaleString();
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('statusBadge').textContent = 'Completed';
+            
+            // Save final state
+            saveMigrationState();
+            
+            const completed = migrationResults.filter(r => r.status === 'success').length;
+            const failed = migrationResults.filter(r => r.status === 'error').length;
+            
+            addLog(`Migration completed! ${completed} successful, ${failed} failed.`, 
+                failed === 0 ? 'success' : 'warning');
+        }
+
+        // Download Excel Report - Console Logs (Table-wise)
+        function downloadExcelReport() {
+            if (migrationResults.length === 0) {
+                addLog('No migration data to export. Please run migrations first.', 'warning');
+                return;
+            }
+
+            addLog('Generating console logs report (table-wise)...', 'info');
+            
+            // Create CSV content with table-wise console logs
+            let csvContent = "data:text/csv;charset=utf-8,";
+            
+            // Add Header
+            csvContent += "=== MIGRATION CONSOLE LOGS REPORT (TABLE-WISE) ===\n";
+            csvContent += "Generated:," + new Date().toLocaleString() + "\n\n";
+            
+            // Process each table's console logs
+            migrationResults.forEach((result, index) => {
+                const tableName = result.table;
+                csvContent += `\n=== ${index + 1}. ${tableName} ===\n`;
+                csvContent += "Timestamp,Log Message\n";
+                
+                // Get console logs from the stored result
+                const consoleLogs = result.logs || [];
+                
+                if (consoleLogs.length > 0) {
+                    consoleLogs.forEach(log => {
+                        const timestamp = log.timestamp || '';
+                        const message = (log.message || '').replace(/"/g, '""');
+                        csvContent += `"${timestamp}","${message}"\n`;
+                    });
+                } else {
+                    csvContent += `"","⚠️  NOTE: Console logs are printed to the server terminal/console."\n`;
+                    csvContent += `"","To capture these logs automatically, the migration service needs to be updated to return logs in the API response."\n`;
+                    csvContent += `"","Current workaround: Check your ASP.NET Core application terminal/console for detailed logs."\n`;
+                }
+                
+                csvContent += "\n";
+            });
+
+            // Create download link
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
+            link.setAttribute("download", `Migration_Console_Logs_${timestamp}.csv`);
+            document.body.appendChild(link);
+            
+            link.click();
+            document.body.removeChild(link);
+            
+            addLog('Console logs report downloaded successfully!', 'success');
+        }
+
+        // Run Seed Data
+        async function runSeedData() {
+            if (!confirm('Are you sure you want to run seed data migrations? This will insert seed data into the PostgreSQL database.')) {
+                return;
+            }
+
+            document.getElementById('btnSeedData').disabled = true;
+            addLog('Starting seed data migration...', 'info');
+
+            try {
+                const response = await fetch('/Migration/RunSeedData', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addLog(`✓ Seed data migration completed successfully!`, 'success');
+                    addLog(`  ${result.message}`, 'info');
+                } else {
+                    addLog(`✗ Seed data migration failed: ${result.message || result.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`✗ Error running seed data: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('btnSeedData').disabled = false;
+            }
+        }
+
+        // Truncate Database
+        async function truncateDatabase() {
+            const confirmText = prompt(
+                'WARNING: This will DELETE ALL DATA from all tables except migration tables!\n\n' +
+                'Type "TRUNCATE" (in capital letters) to confirm:'
+            );
+
+            if (confirmText !== 'TRUNCATE') {
+                if (confirmText !== null) {
+                    addLog('Truncate operation cancelled - incorrect confirmation text', 'warning');
+                }
+                return;
+            }
+
+            document.getElementById('btnTruncate').disabled = true;
+            addLog('Starting database truncation...', 'warning');
+
+            try {
+                const response = await fetch('/Migration/TruncateAllTables', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addLog(`✓ Database truncation completed successfully!`, 'success');
+                    addLog(`  ${result.message}`, 'info');
+                    if (result.tablesTruncated) {
+                        addLog(`  Tables truncated: ${result.tablesTruncated}`, 'info');
+                    }
+                } else {
+                    addLog(`✗ Database truncation failed: ${result.message || result.error}`, 'error');
+                }
+            } catch (error) {
+                addLog(`✗ Error truncating database: ${error.message}`, 'error');
+            } finally {
+                document.getElementById('btnTruncate').disabled = false;
+            }
+        }
+
+        // Reset Migration
+        function resetMigration() {
+            if (!confirm('Are you sure you want to reset the migration? This will clear all progress and start fresh.')) {
+                return;
+            }
+
+            // Reset all variables
+            currentIndex = 0;
+            isPaused = false;
+            isStopped = false;
+            startTime = null;
+            migrationResults = [];
+
+            // Clear storage
+            clearMigrationState();
+
+            // Reset UI
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnPause').disabled = true;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('btnDownload').disabled = true;
+            document.getElementById('statusBadge').textContent = 'Ready';
+            document.getElementById('startTime').textContent = '-';
+            document.getElementById('endTime').textContent = '-';
+            document.getElementById('duration').textContent = '-';
+            document.getElementById('avgSpeed').textContent = '-';
+            document.getElementById('totalRecords').textContent = '0';
+
+            // Reinitialize timeline
+            initializeTimeline();
+
+            // Reset statistics
+            document.getElementById('completedCount').textContent = '0';
+            document.getElementById('failedCount').textContent = '0';
+            document.getElementById('pendingCount').textContent = migrations.length;
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressBar').textContent = '0%';
+
+            // Clear results table
+            document.getElementById('resultsTable').innerHTML = '';
+
+            // Clear log
+            document.getElementById('liveLog').innerHTML = '';
+
+            addLog('Migration reset successfully. Ready to start fresh.', 'success');
+        }
+
+        // Initialize on page load
+        window.onload = function() {
+            // Populate table dropdown
+            const select = document.getElementById('startTableSelect');
+            if (select) {
+                migrations.forEach((migration, idx) => {
+                    const option = document.createElement('option');
+                    option.value = idx;
+                    option.text = `${idx + 1}. ${migration.display}`;
+                    select.appendChild(option);
+                });
+            }
+            initializeTimeline();
+            initializeSignalR();
+            loadMigrationState(); // Load saved state from localStorage
+            addLog('Sequential Migration Executor initialized', 'success');
+            addLog(`${migrations.length} tables queued for migration`, 'info');
+            
+            if (migrationResults.length > 0) {
+                addLog(`Restored ${migrationResults.length} completed migrations from previous session`, 'info');
+            }
+        };
+    </script>
+</body>
+</html>

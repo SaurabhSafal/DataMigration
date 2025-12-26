@@ -1,0 +1,342 @@
+using Microsoft.Data.SqlClient;
+using Npgsql;
+using System.Data;
+using DataMigration.Services;
+
+namespace DataMigration.Services
+{
+    public class NfaPoConditionMigration
+    {
+        private readonly ILogger<NfaPoConditionMigration> _logger;
+    private MigrationLogger? _migrationLogger;
+        private readonly IConfiguration _configuration;
+
+        public NfaPoConditionMigration(IConfiguration configuration, ILogger<NfaPoConditionMigration> logger)
+        {
+            _configuration = configuration;
+            _logger = logger;
+        }
+
+    public MigrationLogger? GetLogger() => _migrationLogger;
+
+        public List<object> GetMappings()
+        {
+            return new List<object>
+            {
+                new { source = "AwardEventPoConditionId (Auto-increment)", target = "nfa_po_condition_id", type = "int -> integer (NOT NULL, Auto-increment)" },
+                new { source = "AwardEventItemId", target = "nfa_line_id", type = "int -> integer (NOT NULL, FK)" },
+                new { source = "PoConditionId", target = "po_condition_id", type = "int -> integer (NOT NULL, FK)" },
+                new { source = "Percentage", target = "value", type = "nvarchar -> numeric (NOT NULL)" }
+            };
+        }
+
+        public async Task<int> MigrateAsync()
+        {
+        _migrationLogger = new MigrationLogger(_logger, "nfa_po_condition");
+        _migrationLogger.LogInfo("Starting migration");
+
+            var sqlConnectionString = _configuration.GetConnectionString("SqlServer");
+            var pgConnectionString = _configuration.GetConnectionString("PostgreSql");
+
+            if (string.IsNullOrEmpty(sqlConnectionString) || string.IsNullOrEmpty(pgConnectionString))
+            {
+                throw new InvalidOperationException("Database connection strings are not configured properly.");
+            }
+
+            var migratedRecords = 0;
+            var skippedRecords = 0;
+            var skippedDetails = new List<(string RecordId, string Reason)>();
+
+            try
+            {
+                using var sqlConnection = new SqlConnection(sqlConnectionString);
+                using var pgConnection = new NpgsqlConnection(pgConnectionString);
+
+                await sqlConnection.OpenAsync();
+                await pgConnection.OpenAsync();
+
+                _logger.LogInformation("Starting NfaPoCondition migration...");
+
+                // Truncate and restart identity
+                using (var cmd = new NpgsqlCommand(@"
+                    TRUNCATE TABLE nfa_po_condition RESTART IDENTITY CASCADE;", pgConnection))
+                {
+                    await cmd.ExecuteNonQueryAsync();
+                    _logger.LogInformation("Reset nfa_po_condition table and restarted identity sequence");
+                }
+
+                // Build lookup for valid nfa_line_id from PostgreSQL
+                var validNfaLineIds = new HashSet<int>();
+                using (var cmd = new NpgsqlCommand(@"
+                    SELECT nfa_line_id 
+                    FROM nfa_line 
+                    WHERE nfa_line_id IS NOT NULL", pgConnection))
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        validNfaLineIds.Add(reader.GetInt32(0));
+                    }
+                }
+                _logger.LogInformation($"Built nfa_line_id lookup with {validNfaLineIds.Count} entries");
+
+                // Build lookup for valid po_condition_id from PostgreSQL
+                var validPoConditionIds = new HashSet<int>();
+                using (var cmd = new NpgsqlCommand(@"
+                    SELECT po_condition_id 
+                    FROM po_condition_master 
+                    WHERE po_condition_id IS NOT NULL", pgConnection))
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        validPoConditionIds.Add(reader.GetInt32(0));
+                    }
+                }
+                _logger.LogInformation($"Built po_condition_id lookup with {validPoConditionIds.Count} entries");
+
+                // Fetch source data
+                var sourceData = new List<SourceRow>();
+                
+                using (var cmd = new SqlCommand(@"
+                    SELECT 
+                        AwardEventPoConditionId,
+                        AwardEventItemId,
+                        PoConditionId,
+                        Percentage
+                    FROM TBL_AwardEventPoCondition
+                    WHERE AwardEventPoConditionId IS NOT NULL
+                    ORDER BY AwardEventPoConditionId", sqlConnection))
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        sourceData.Add(new SourceRow
+                        {
+                            AwardEventPoConditionId = reader.GetInt32(0),
+                            AwardEventItemId = reader.IsDBNull(1) ? null : reader.GetInt32(1),
+                            PoConditionId = reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                            Percentage = reader.IsDBNull(3) ? null : reader.GetString(3)
+                        });
+                    }
+                }
+
+                _logger.LogInformation($"Fetched {sourceData.Count} records from TBL_AwardEventPoCondition");
+
+                const int batchSize = 500;
+                var insertBatch = new List<TargetRow>();
+
+                foreach (var record in sourceData)
+                {
+                    try
+                    {
+                        // Validate nfa_line_id (REQUIRED - NOT NULL, FK)
+                        if (!record.AwardEventItemId.HasValue)
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: AwardEventItemId is null");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), "AwardEventItemId is null"));
+                            continue;
+                        }
+                        if (!validNfaLineIds.Contains(record.AwardEventItemId.Value))
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: AwardEventItemId={record.AwardEventItemId} not found in nfa_line");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), $"AwardEventItemId={record.AwardEventItemId} not found in nfa_line"));
+                            continue;
+                        }
+                        // Validate po_condition_id (REQUIRED - NOT NULL, FK)
+                        if (!record.PoConditionId.HasValue)
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: PoConditionId is null");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), "PoConditionId is null"));
+                            continue;
+                        }
+                        if (!validPoConditionIds.Contains(record.PoConditionId.Value))
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: PoConditionId={record.PoConditionId} not found in po_condition_master");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), $"PoConditionId={record.PoConditionId} not found in po_condition_master"));
+                            continue;
+                        }
+                        // Parse and validate Percentage (REQUIRED - NOT NULL)
+                        if (string.IsNullOrWhiteSpace(record.Percentage))
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: Percentage is null/empty");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), "Percentage is null/empty"));
+                            continue;
+                        }
+                        if (!decimal.TryParse(record.Percentage, out var value))
+                        {
+                            _logger.LogWarning($"Skipping AwardEventPoConditionId {record.AwardEventPoConditionId}: Percentage='{record.Percentage}' is not a valid number");
+                            skippedRecords++;
+                            skippedDetails.Add((record.AwardEventPoConditionId.ToString(), $"Percentage='{record.Percentage}' is not a valid number"));
+                            continue;
+                        }
+                        var targetRow = new TargetRow
+                        {
+                            NfaPoConditionId = record.AwardEventPoConditionId,
+                            NfaLineId = record.AwardEventItemId.Value,
+                            PoConditionId = record.PoConditionId.Value,
+                            Value = value
+                        };
+                        insertBatch.Add(targetRow);
+                        migratedRecords++;
+                        if (insertBatch.Count >= batchSize)
+                        {
+                            await ExecuteInsertBatch(pgConnection, insertBatch);
+                            insertBatch.Clear();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError($"Error processing AwardEventPoConditionId {record.AwardEventPoConditionId}: {ex.Message}");
+                        skippedRecords++;
+                        skippedDetails.Add((record.AwardEventPoConditionId.ToString(), $"Exception: {ex.Message}"));
+                    }
+                }
+
+                if (insertBatch.Any())
+                {
+                    await ExecuteInsertBatch(pgConnection, insertBatch);
+                }
+
+                _logger.LogInformation($"Migration completed. Migrated: {migratedRecords}, Skipped: {skippedRecords}");
+
+                // Export migration stats to Excel
+                MigrationStatsExporter.ExportToExcel(
+                    "NfaPoConditionMigrationStats.xlsx",
+                    sourceData.Count,
+                    migratedRecords,
+                    skippedRecords,
+                    _logger,
+                    skippedDetails
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Migration failed");
+                throw;
+            }
+
+            return migratedRecords;
+        }
+
+        private async Task ExecuteInsertBatch(NpgsqlConnection connection, List<TargetRow> batch)
+        {
+            if (!batch.Any()) return;
+
+            var sql = new System.Text.StringBuilder();
+            sql.AppendLine("INSERT INTO nfa_po_condition (");
+            sql.AppendLine("    nfa_po_condition_id, nfa_line_id, po_condition_id, value,");
+            sql.AppendLine("    created_by, created_date, modified_by, modified_date,");
+            sql.AppendLine("    is_deleted, deleted_by, deleted_date");
+            sql.AppendLine(") VALUES");
+
+            var values = new List<string>();
+            using var cmd = new NpgsqlCommand();
+            cmd.Connection = connection;
+
+            for (int i = 0; i < batch.Count; i++)
+            {
+                var row = batch[i];
+                values.Add($"(@NfaPoConditionId{i}, @NfaLineId{i}, @PoConditionId{i}, @Value{i}, NULL, NULL, NULL, NULL, false, NULL, NULL)");
+                
+                cmd.Parameters.AddWithValue($"@NfaPoConditionId{i}", row.NfaPoConditionId);
+                cmd.Parameters.AddWithValue($"@NfaLineId{i}", row.NfaLineId);
+                cmd.Parameters.AddWithValue($"@PoConditionId{i}", row.PoConditionId);
+                cmd.Parameters.AddWithValue($"@Value{i}", row.Value);
+            }
+
+            sql.AppendLine(string.Join(",\n", values));
+            cmd.CommandText = sql.ToString();
+
+            try
+            {
+                var rowsAffected = await cmd.ExecuteNonQueryAsync();
+                _logger.LogDebug($"Batch inserted {rowsAffected} records");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Batch insert failed: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<int> UpdateNfaLineWithAggregatedPoConditionsAsync()
+        {
+            var pgConnectionString = _configuration.GetConnectionString("PostgreSql");
+
+            if (string.IsNullOrEmpty(pgConnectionString))
+            {
+                throw new InvalidOperationException("PostgreSQL connection string is not configured properly.");
+            }
+
+            var updatedRecords = 0;
+
+            try
+            {
+                using var pgConnection = new NpgsqlConnection(pgConnectionString);
+                await pgConnection.OpenAsync();
+
+                _logger.LogInformation("Starting post-migration: Updating nfa_line with aggregated po_condition_id values...");
+
+                // Update nfa_line with comma-separated nfa_po_condition_id values
+                using var cmd = new NpgsqlCommand(@"
+                    UPDATE nfa_line nl
+                    SET po_condition_id = agg.ids
+                    FROM (
+                        SELECT 
+                            nfa_line_id,
+                            string_agg(nfa_po_condition_id::text, ',' ORDER BY nfa_po_condition_id) AS ids
+                        FROM nfa_po_condition
+                        WHERE nfa_line_id IS NOT NULL
+                        GROUP BY nfa_line_id
+                    ) AS agg
+                    WHERE nl.nfa_line_id = agg.nfa_line_id", pgConnection);
+
+                updatedRecords = await cmd.ExecuteNonQueryAsync();
+                
+                _logger.LogInformation($"Post-migration completed. Updated {updatedRecords} nfa_line records with aggregated po_condition_id values");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Post-migration update failed");
+                throw;
+            }
+
+            return updatedRecords;
+        }
+
+        public async Task<(int MigratedRecords, int UpdatedRecords)> MigrateAndUpdateAsync()
+        {
+            // First run the migration
+            var migratedRecords = await MigrateAsync();
+            
+            // Then update nfa_line with aggregated values
+            var updatedRecords = await UpdateNfaLineWithAggregatedPoConditionsAsync();
+            
+            _logger.LogInformation($"Complete migration process finished. Migrated: {migratedRecords}, Updated nfa_line: {updatedRecords}");
+            
+            return (migratedRecords, updatedRecords);
+        }
+
+        private class SourceRow
+        {
+            public int AwardEventPoConditionId { get; set; }
+            public int? AwardEventItemId { get; set; }
+            public int? PoConditionId { get; set; }
+            public string? Percentage { get; set; }
+        }
+
+        private class TargetRow
+        {
+            public int NfaPoConditionId { get; set; }
+            public int NfaLineId { get; set; }
+            public int PoConditionId { get; set; }
+            public decimal Value { get; set; }
+        }
+    }
+}
