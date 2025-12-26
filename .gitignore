@@ -806,3 +806,6 @@ python/config/*.ini
 python/config/*.conf
 appsettings.json
 appsettings.json
+appsettings.json
+appsettings.Development.json
+.env
