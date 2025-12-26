@@ -143,17 +143,19 @@ INSERT INTO pr_boq_items (
         return await base.MigrateAsync(useTransaction: true);
     }
 
-    private async Task<HashSet<int>> LoadValidErpPrLinesIdsAsync(NpgsqlConnection pgConn, NpgsqlTransaction? transaction)
+    private async Task<Dictionary<int, decimal>> LoadErpPrLinesRemQtyAsync(NpgsqlConnection pgConn, NpgsqlTransaction? transaction)
     {
-        var validIds = new HashSet<int>();
-        var query = "SELECT erp_pr_lines_id FROM erp_pr_lines";
+        var remQtyDict = new Dictionary<int, decimal>();
+        var query = "SELECT erp_pr_lines_id, rem_qty FROM erp_pr_lines";
         using var cmd = new NpgsqlCommand(query, pgConn, transaction);
         using var reader = await cmd.ExecuteReaderAsync();
         while (await reader.ReadAsync())
         {
-            validIds.Add(reader.GetInt32(0));
+            int id = reader.GetInt32(0);
+            decimal remQty = reader.IsDBNull(1) ? 0 : reader.GetDecimal(1);
+            remQtyDict[id] = remQty;
         }
-        return validIds;
+        return remQtyDict;
     }
 
     protected override async Task<int> ExecuteMigrationAsync(SqlConnection sqlConn, NpgsqlConnection pgConn, NpgsqlTransaction? transaction = null)
@@ -161,10 +163,9 @@ INSERT INTO pr_boq_items (
         _migrationLogger = new MigrationLogger(_logger, "pr_boq_items");
         _migrationLogger.LogInfo("Starting migration");
 
-        // Load valid ERP PR Lines IDs
-        var validErpPrLinesIds = await LoadValidErpPrLinesIdsAsync(pgConn, transaction);
-        _logger.LogInformation($"Loaded {validErpPrLinesIds.Count} valid ERP PR Lines IDs from erp_pr_lines.");
-        
+        // Load ERP PR Lines rem_qty map
+        var erpPrLinesRemQtyMap = await LoadErpPrLinesRemQtyAsync(pgConn, transaction);
+        _logger.LogInformation($"Loaded {erpPrLinesRemQtyMap.Count} ERP PR Lines rem_qty values from erp_pr_lines.");
         int insertedCount = 0;
         int skippedCount = 0;
         int batchNumber = 0;
@@ -178,19 +179,26 @@ INSERT INTO pr_boq_items (
         while (await reader.ReadAsync())
         {
             totalRecords++;
+
             // Validate ERP PR Lines ID (using PRTRANSID which maps to erp_pr_lines_id)
             var erpPrLinesIdValue = reader["PRTRANSID"];
+            decimal prBoqQty = reader["IQty"] != DBNull.Value ? Convert.ToDecimal(reader["IQty"]) : 0;
+            decimal prBoqRemQty = 0;
             if (erpPrLinesIdValue != DBNull.Value)
             {
                 int erpPrLinesId = Convert.ToInt32(erpPrLinesIdValue);
-                // Skip if ERP PR Lines ID not present in erp_pr_lines
-                if (!validErpPrLinesIds.Contains(erpPrLinesId))
+                if (!erpPrLinesRemQtyMap.ContainsKey(erpPrLinesId))
                 {
                     var reason = $"ERP PR Lines ID {erpPrLinesId} not found in erp_pr_lines.";
                     _logger.LogWarning($"Skipping ItemId {reader["ItemId"]}: {reason}");
                     skippedCount++;
                     skippedRecords.Add(($"ItemId={reader["ItemId"]}", reason));
                     continue;
+                }
+                // If rem_qty > 0, set pr_boq_rem_qty = pr_boq_qty
+                if (erpPrLinesRemQtyMap[erpPrLinesId] > 0)
+                {
+                    prBoqRemQty = prBoqQty;
                 }
             }
             else
@@ -201,7 +209,6 @@ INSERT INTO pr_boq_items (
                 skippedRecords.Add(($"ItemId={reader["ItemId"]}", reason));
                 continue;
             }
-            
 
             var record = new Dictionary<string, object>
             {
@@ -210,10 +217,10 @@ INSERT INTO pr_boq_items (
                 ["pr_boq_material_code"] = reader["ICode"] ?? DBNull.Value,
                 ["pr_boq_name"] = reader["IName"] ?? DBNull.Value,
                 ["pr_boq_description"] = DBNull.Value, // New column - not in source
-                ["pr_boq_rem_qty"] = 0, // Default to 0 as column has NOT NULL constraint
+                ["pr_boq_rem_qty"] = prBoqRemQty, // Set as per rem_qty logic
                 ["pr_boq_status"] = DBNull.Value, // New column - not in source
                 ["pr_boq_uom_code"] = reader["IUOM"] ?? DBNull.Value,
-                ["pr_boq_qty"] = reader["IQty"] != DBNull.Value ? Convert.ToDecimal(reader["IQty"]) : (object)DBNull.Value,
+                ["pr_boq_qty"] = prBoqQty != 0 ? prBoqQty : (object)DBNull.Value,
                 ["pr_boq_rate"] = reader["IRate"] != DBNull.Value ? Convert.ToDecimal(reader["IRate"]) : (object)DBNull.Value,
                 ["pr_boq_remark"] = reader["Remarks"] ?? DBNull.Value,
                 ["pr_boq_currency"] = reader["ICurrency"] ?? DBNull.Value,
