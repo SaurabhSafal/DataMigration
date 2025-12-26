@@ -12,12 +12,6 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
       DOTNET_USE_POLLING_FILE_WATCHER: "true"
-      ConnectionStrings__PostgreSql: >
-        Host=host.docker.internal;
-        Port=5432;
-        Database=navikaran;
-        Username=admin;
-        Password=admin123
     volumes:
       - .:/app
       - ./logs:/app/logs
