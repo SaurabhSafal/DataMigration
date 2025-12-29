@@ -400,7 +400,7 @@ namespace DataMigration.Services
             var batchStart = DateTime.UtcNow;
             _logger.LogInformation($"Processing batch {batchIndex + 1}/{totalBatches} ({batch.Count} files)...");
 
-            string folderPath = "prattachment"; // You can make this optional or parameterized
+            string folderPath = "WCL/Purchase_Requisition/"; // You can make this optional or parameterized
             int updatedCount = 0;
             foreach (var (id, data) in batch)
             {

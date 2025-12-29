@@ -80,18 +80,49 @@ public class EventSettingMigrationService
         using var sqlCmd = new SqlCommand(selectQuery, sqlConnection);
         using var reader = await sqlCmd.ExecuteReaderAsync();
         var copyCommand = @"COPY event_setting (
-            event_id, event_mode, tie_prevent_lot, tie_prevent_item, target_price_applicable,
-            auto_extended_enable, no_of_times_auto_extended, auto_extended_minutes, 
-            apply_extended_times, green_percentage, yellow_percentage, show_item_level_rank,
-            show_lot_level_rank, basic_price_applicable, basic_price_validation_mandatory,
-            min_max_bid_applicable, show_lower_bid, apply_all_settings_in_price_bid,
-            min_lot_auction_bid_value, max_lot_auction_bid_value, configure_lot_level_auction,
-            lot_level_basic_price, price_bid_attachment_mandatory, discount_applicable,
-            gst_mandatory, technical_attachment_mandatory, proposed_qty, ready_stock_mandatory,
-            created_by, created_date, modified_by, modified_date, deleted_by, deleted_date,
-            is_deleted, lot_level_target_price, max_lot_bid_type, min_lot_bid_type, 
-            allow_currency_selection
-        ) FROM STDIN (FORMAT TEXT, DELIMITER '|')";
+    event_id,
+    event_mode,
+    tie_prevent_lot,
+    tie_prevent_item,
+    target_price_applicable,
+    auto_extended_enable,
+    no_of_times_auto_extended,
+    auto_extended_minutes,
+    apply_extended_times,
+    green_percentage,
+    yellow_percentage,
+    show_item_level_rank,
+    show_lot_level_rank,
+    basic_price_applicable,
+    basic_price_validation_mandatory,
+    min_max_bid_applicable,
+    show_lower_bid,
+    apply_all_settings_in_price_bid,
+    min_lot_auction_bid_value,
+    max_lot_auction_bid_value,
+    configure_lot_level_auction,
+    lot_level_basic_price,
+    price_bid_attachment_mandatory,
+    discount_applicable,
+    gst_mandatory,
+    technical_attachment_mandatory,
+    proposed_qty,
+    ready_stock_mandatory,
+    created_by,
+    created_date,
+    modified_by,
+    modified_date,
+    is_deleted,
+    deleted_by,
+    deleted_date,
+    lot_level_target_price,
+    max_lot_bid_type,
+    min_lot_bid_type,
+    allow_currency_selection,
+    no_limit_for_auto_extension
+)
+FROM STDIN (FORMAT TEXT, DELIMITER '|');
+";
         using var writer = await pgConnection.BeginTextImportAsync(copyCommand);
         var now = DateTime.UtcNow;
         while (await reader.ReadAsync())
@@ -104,48 +135,51 @@ public class EventSettingMigrationService
                 skippedDetails.Add((reader["EVENTSCHEDULARID"]?.ToString() ?? "NULL", "EVENTID is NULL"));
                 continue;
             }
-            var fields = new string[]
-            {
-                FormatInteger(reader["EVENTID"]),
-                FormatValue(reader["EventMode"]),
-                Bool(reader["TiePreventLot"]),
-                Bool(reader["TiePreventItem"]),
-                Bool(reader["IsTargetPriceApplicable"]),
-                Bool(reader["IsAutoExtendedEnable"]),
-                FormatInteger(reader["NoofTimesAutoExtended"]),
-                FormatInteger(reader["AutoExtendedMinutes"]),
-                Bool(reader["ApplyExtendedTimes"]),
-                FormatNumeric(reader["GREENPERCENTAGE"]),
-                FormatNumeric(reader["YELLOWPERCENTAGE"]),
-                Bool(reader["IsItemLevelRankShow"]),
-                Bool(reader["IsLotLevelRankShow"]),
-                ConditionalBool(reader["IsLotLevelAuction"], reader["IsBasicPriceApplicable"]),
-                Bool(reader["IsBasicPriceValidationReq"]),
-                Bool(reader["IsMinMaxBidApplicable"]),
-                Bool(reader["IsLowestBidShow"]),
-                Bool(reader["BesideAuctionFirstBid"]),
-                FormatNumeric(reader["MinBid"]),
-                FormatNumeric(reader["MaxBid"]),
-                Bool(reader["IsLotLevelAuction"]),
-                FormatNumeric(reader["LotLevelBasicPrice"]),
-                Bool(reader["IsPriceBidAttachmentcompulsory"]),
-                Bool(reader["IsDiscountApplicable"]),
-                Bool(reader["IsGSTCompulsory"]),
-                Bool(reader["IsTechnicalAttachmentcompulsory"]),
-                Bool(reader["IsProposedQty"]),
-                Bool(reader["IsRedyStockmandatory"]),
-                "0",
-                now.ToString("yyyy-MM-dd HH:mm:ss.ffffff+00"),
-                "\\N",
-                "\\N",
-                "\\N",
-                "\\N",
-                "f",
-                "0",
-                FormatValue(reader["MinBidMode"]),
-                FormatValue(reader["MaxBidMode"]),
-                "f"
-            };
+           var fields = new string[]
+{
+    FormatInteger(reader["EVENTID"]),
+    FormatValue(reader["EventMode"]),
+    Bool(reader["TiePreventLot"]),
+    Bool(reader["TiePreventItem"]),
+    Bool(reader["IsTargetPriceApplicable"]),
+    Bool(reader["IsAutoExtendedEnable"]),
+    FormatInteger(reader["NoofTimesAutoExtended"]),
+    FormatInteger(reader["AutoExtendedMinutes"]),
+    FormatInteger(reader["ApplyExtendedTimes"]),
+    FormatNumeric(reader["GREENPERCENTAGE"]),
+    FormatNumeric(reader["YELLOWPERCENTAGE"]),
+    Bool(reader["IsItemLevelRankShow"]),
+    Bool(reader["IsLotLevelRankShow"]),
+    ConditionalBool(reader["IsLotLevelAuction"], reader["IsBasicPriceApplicable"]),
+    Bool(reader["IsBasicPriceValidationReq"]),
+    Bool(reader["IsMinMaxBidApplicable"]),
+    Bool(reader["IsLowestBidShow"]),
+    Bool(reader["BesideAuctionFirstBid"]),
+    FormatNumeric(reader["MinBid"]),
+    FormatNumeric(reader["MaxBid"]),
+    Bool(reader["IsLotLevelAuction"]),
+    FormatNumeric(reader["LotLevelBasicPrice"]),
+    Bool(reader["IsPriceBidAttachmentcompulsory"]),
+    Bool(reader["IsDiscountApplicable"]),
+    Bool(reader["IsGSTCompulsory"]),
+    Bool(reader["IsTechnicalAttachmentcompulsory"]),
+    Bool(reader["IsProposedQty"]),
+    Bool(reader["IsRedyStockmandatory"]),
+
+    "0",                                           // created_by
+    now.ToString("yyyy-MM-dd HH:mm:ss.ffffff+00"), // created_date
+    "\\N",                                         // modified_by
+    "\\N",                                         // modified_date
+    "f",                                           // is_deleted ✅
+    "\\N",                                         // deleted_by
+    "\\N",                                         // deleted_date
+    "0",                                           // lot_level_target_price
+    FormatValue(reader["MinBidMode"]),
+    FormatValue(reader["MaxBidMode"]),
+    "f",                                           // allow_currency_selection
+    "f"                                            // no_limit_for_auto_extension
+};
+
             var row = string.Join("|", fields);
             await writer.WriteLineAsync(row);
             migratedCount++;
