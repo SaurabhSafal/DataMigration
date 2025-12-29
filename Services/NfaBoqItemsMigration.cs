@@ -24,7 +24,7 @@ namespace DataMigration.Services
             return new List<object>
             {
                 new { source = "SubItemID (Auto-increment)", target = "nfa_boq_items_id", type = "int -> integer (NOT NULL, Auto-increment)" },
-                new { source = "PRTransId", target = "erp_pr_lines_id", type = "int -> integer (NOT NULL, FK)" },
+                new { source = "TBL_PRTRANSACTION.PRTRANSID", target = "erp_pr_lines_id", type = "int -> integer (NOT NULL, FK) (from old table)" },
                 new { source = "Lookup: Tbl_AwardEventItem.AWARDEVENTMAINID via AwardItemId", target = "nfa_header_id", type = "Lookup -> integer (NOT NULL, FK)" },
                 new { source = "ItemId", target = "pr_boq_id", type = "int -> integer (NOT NULL)" },
                 new { source = "AwardItemId", target = "nfa_line_id", type = "int -> integer (NOT NULL)" },
@@ -70,11 +70,9 @@ namespace DataMigration.Services
                 }
 
                 // Build lookup for valid erp_pr_lines_id from PostgreSQL
+                // Build lookup for valid erp_pr_lines_id from TBL_PRTRANSACTION in SQL Server (old table)
                 var validErpPrLinesIds = new HashSet<int>();
-                using (var cmd = new NpgsqlCommand(@"
-                    SELECT erp_pr_lines_id 
-                    FROM erp_pr_lines 
-                    WHERE erp_pr_lines_id IS NOT NULL", pgConnection))
+                using (var cmd = new SqlCommand(@"SELECT PRTRANSID FROM TBL_PRTRANSACTION WHERE PRTRANSID IS NOT NULL", sqlConnection))
                 using (var reader = await cmd.ExecuteReaderAsync())
                 {
                     while (await reader.ReadAsync())
@@ -82,7 +80,7 @@ namespace DataMigration.Services
                         validErpPrLinesIds.Add(reader.GetInt32(0));
                     }
                 }
-                _logger.LogInformation($"Built erp_pr_lines_id lookup with {validErpPrLinesIds.Count} entries");
+                _logger.LogInformation($"Built erp_pr_lines_id lookup from TBL_PRTRANSACTION with {validErpPrLinesIds.Count} entries");
 
                 // Build lookup for valid nfa_line_id from PostgreSQL
                 var validNfaLineIds = new HashSet<int>();
