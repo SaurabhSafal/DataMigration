@@ -201,17 +201,22 @@ ON CONFLICT (event_item_id) DO UPDATE SET
         }
 
         // Fetch event master recall data
-        var recallEventQuery = @"SELECT EVENTID, RecallDate, RecallRemarks, CURRENTSTATUS FROM TBL_EVENTMASTER WHERE EVENTID = 44391";
-        using (var recallEventCmd = new SqlCommand(recallEventQuery, sqlConn))
-        using (var recallEventReader = await recallEventCmd.ExecuteReaderAsync())
+        // Fetch recall event data for all event IDs in validEventIds
+        if (validEventIds.Count > 0)
         {
-            while (await recallEventReader.ReadAsync())
+            var eventIdList = string.Join(",", validEventIds);
+            var recallEventQuery = $@"SELECT EVENTID, RecallDate, RecallRemarks, CURRENTSTATUS FROM TBL_EVENTMASTER WHERE EVENTID IN ({eventIdList})";
+            using (var recallEventCmd = new SqlCommand(recallEventQuery, sqlConn))
+            using (var recallEventReader = await recallEventCmd.ExecuteReaderAsync())
             {
-                int eventId = recallEventReader.GetInt32(0);
-                DateTime? recallDate = recallEventReader.IsDBNull(1) ? (DateTime?)null : recallEventReader.GetDateTime(1);
-                string? recallRemarks = recallEventReader.IsDBNull(2) ? null : recallEventReader.GetString(2);
-                string? currentStatus = recallEventReader.IsDBNull(3) ? null : recallEventReader.GetString(3);
-                recallEventDict[eventId] = (recallDate, recallRemarks, currentStatus);
+                while (await recallEventReader.ReadAsync())
+                {
+                    int eventId = recallEventReader.GetInt32(0);
+                    DateTime? recallDate = recallEventReader.IsDBNull(1) ? (DateTime?)null : recallEventReader.GetDateTime(1);
+                    string? recallRemarks = recallEventReader.IsDBNull(2) ? null : recallEventReader.GetString(2);
+                    string? currentStatus = recallEventReader.IsDBNull(3) ? null : recallEventReader.GetString(3);
+                    recallEventDict[eventId] = (recallDate, recallRemarks, currentStatus);
+                }
             }
         }
 
@@ -404,10 +409,10 @@ ON CONFLICT (event_item_id) DO UPDATE SET
                 ["is_deleted"] = false,
                 ["deleted_by"] = DBNull.Value,
                 ["deleted_date"] = DBNull.Value,
-                ["items_status"] = (recalledQty > 0.00m && itemsStatus != null) ? (object)itemsStatus : DBNull.Value,
-                ["recalled_date"] = (recalledQty > 0.00m && recalledDate.HasValue) ? (object)recalledDate.Value : DBNull.Value,
-                ["recalled_for_partial_qty"] = recalledQty > 0.00m ? (object)recalledQty : DBNull.Value,
-                ["recalled_remarks"] = (recalledQty > 0.00m && recalledRemarks != null) ? (object)recalledRemarks : DBNull.Value,
+                ["items_status"] = (recalledQty > 0.00m && itemsStatus == "Recalled for P.Qty") ? (object)itemsStatus : DBNull.Value,
+                ["recalled_date"] = (recalledQty > 0.00m && itemsStatus == "Recalled for P.Qty" && recalledDate.HasValue) ? (object)recalledDate.Value : DBNull.Value,
+                ["recalled_for_partial_qty"] = (recalledQty > 0.00m && itemsStatus == "Recalled for P.Qty") ? (object)recalledQty : DBNull.Value,
+                ["recalled_remarks"] = (recalledQty > 0.00m && itemsStatus == "Recalled for P.Qty" && recalledRemarks != null) ? (object)recalledRemarks : DBNull.Value,
                 ["lpo_number"] = lpo_number ?? (object)DBNull.Value,
                 ["lpo_date"] = lpo_date ?? (object)DBNull.Value,
                 ["lpo_vendor_code"] = lpo_vendor_code ?? (object)DBNull.Value,
