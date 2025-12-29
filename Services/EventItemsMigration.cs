@@ -162,6 +162,59 @@ ON CONFLICT (event_item_id) DO UPDATE SET
 
     protected override async Task<int> ExecuteMigrationAsync(SqlConnection sqlConn, NpgsqlConnection pgConn, NpgsqlTransaction? transaction = null)
     {
+
+        // --- Recall Data Calculation ---
+        var recallQtyDict = new Dictionary<(int PBID, int PRTRANSID), decimal>();
+        var recallEventDict = new Dictionary<int, (DateTime? RecallDate, string? RecallRemarks, string? CurrentStatus)>();
+
+        // Fetch recall quantities
+        // Load valid event IDs from event_master (needed before recallQtyDict population)
+        var validEventIds = await LoadValidEventIdsAsync(pgConn, transaction);
+        _logger.LogInformation($"Loaded {validEventIds.Count} valid event IDs from event_master.");
+
+        // Optimize: Fetch recall quantities for all valid event IDs in a single query
+        // Batch event IDs to avoid SQL Server query plan resource exhaustion
+        const int batchSize = 100;
+        var eventIdArray = validEventIds.ToArray();
+        for (int i = 0; i < eventIdArray.Length; i += batchSize)
+        {
+            var batchIds = eventIdArray.Skip(i).Take(batchSize);
+            var eventIdList = string.Join(",", batchIds);
+            var recallQtyQuery = $@"
+                SELECT pb.PBID, pb.PRTRANSID, (ISNULL(pb.QTY,0) - SUM(ISNULL(aei.ASSIGNQTY,0))) AS RecalledQty
+                FROM TBL_PB_BUYER pb
+                LEFT JOIN TBL_AWARDEVENTMAIN aem ON aem.EventId = pb.EVENTID
+                LEFT JOIN TBL_AWARDEVENTITEM aei ON aei.AWARDEVENTMAINID = aem.AWARDEVENTMAINID AND pb.PRTRANSID = aei.PRTRANSID
+                WHERE pb.EVENTID IN ({eventIdList}) AND pb.SEQUENCEID > 0
+                GROUP BY pb.PBID, pb.PRTRANSID, pb.QTY";
+            using (var recallQtyCmd = new SqlCommand(recallQtyQuery, sqlConn))
+            using (var recallQtyReader = await recallQtyCmd.ExecuteReaderAsync())
+            {
+                while (await recallQtyReader.ReadAsync())
+                {
+                    int pbid = recallQtyReader.GetInt32(0);
+                    int prtransid = recallQtyReader.GetInt32(1);
+                    decimal recalledQty = recallQtyReader.IsDBNull(2) ? 0 : recallQtyReader.GetDecimal(2);
+                    recallQtyDict[(pbid, prtransid)] = recalledQty;
+                }
+            }
+        }
+
+        // Fetch event master recall data
+        var recallEventQuery = @"SELECT EVENTID, RecallDate, RecallRemarks, CURRENTSTATUS FROM TBL_EVENTMASTER WHERE EVENTID = 44391";
+        using (var recallEventCmd = new SqlCommand(recallEventQuery, sqlConn))
+        using (var recallEventReader = await recallEventCmd.ExecuteReaderAsync())
+        {
+            while (await recallEventReader.ReadAsync())
+            {
+                int eventId = recallEventReader.GetInt32(0);
+                DateTime? recallDate = recallEventReader.IsDBNull(1) ? (DateTime?)null : recallEventReader.GetDateTime(1);
+                string? recallRemarks = recallEventReader.IsDBNull(2) ? null : recallEventReader.GetString(2);
+                string? currentStatus = recallEventReader.IsDBNull(3) ? null : recallEventReader.GetString(3);
+                recallEventDict[eventId] = (recallDate, recallRemarks, currentStatus);
+            }
+        }
+
         var lpoFieldsMap = await LoadLpoFieldsAsync(sqlConn);
         _logger.LogInformation($"Loaded {lpoFieldsMap.Count} LPO fields records");
         _migrationLogger = new MigrationLogger(_logger, "event_items");
@@ -192,11 +245,6 @@ ON CONFLICT (event_item_id) DO UPDATE SET
         // Load UOM master data for UOM ID lookup
         var uomMasterData = await LoadUomMasterDataAsync(pgConn, transaction);
         _logger.LogInformation($"Loaded {uomMasterData.Count} UOM records for lookup.");
-
-        // Load valid event IDs from event_master
-        var validEventIds = await LoadValidEventIdsAsync(pgConn, transaction);
-        _logger.LogInformation($"Loaded {validEventIds.Count} valid event IDs from event_master.");
-
         // Load ERP PR lines data for material lookups
         var erpPrLinesData = await LoadErpPrLinesDataAsync(pgConn, transaction);
         _logger.LogInformation($"Loaded {erpPrLinesData.Count} ERP PR lines for lookup.");
@@ -315,6 +363,26 @@ ON CONFLICT (event_item_id) DO UPDATE SET
                 lpo_line_currency = lpoTuple.lpo_line_currency;
             }
 
+            // --- Recall Data Assignment ---
+            decimal recalledQty = 0;
+            DateTime? recalledDate = null;
+            string? recalledRemarks = null;
+            string? itemsStatus = null;
+            if (pbId != DBNull.Value && prTransId != DBNull.Value)
+            {
+                var key = (Convert.ToInt32(pbId), Convert.ToInt32(prTransId));
+                if (recallQtyDict.TryGetValue(key, out var recalledQtyValue) && recalledQtyValue > 0.00m)
+                {
+                    recalledQty = recalledQtyValue;
+                    if (eventId != DBNull.Value && recallEventDict.TryGetValue(Convert.ToInt32(eventId), out var recallEvent))
+                    {
+                        recalledDate = recallEvent.RecallDate;
+                        recalledRemarks = recallEvent.RecallRemarks;
+                        itemsStatus = recallEvent.CurrentStatus;
+                    }
+                }
+            }
+
             var record = new Dictionary<string, object>
             {
                 ["event_item_id"] = pbId,
@@ -336,10 +404,10 @@ ON CONFLICT (event_item_id) DO UPDATE SET
                 ["is_deleted"] = false,
                 ["deleted_by"] = DBNull.Value,
                 ["deleted_date"] = DBNull.Value,
-                ["items_status"] = DBNull.Value,
-                ["recalled_date"] = DBNull.Value,
-                ["recalled_for_partial_qty"] = DBNull.Value,
-                ["recalled_remarks"] = DBNull.Value,
+                ["items_status"] = (recalledQty > 0.00m && itemsStatus != null) ? (object)itemsStatus : DBNull.Value,
+                ["recalled_date"] = (recalledQty > 0.00m && recalledDate.HasValue) ? (object)recalledDate.Value : DBNull.Value,
+                ["recalled_for_partial_qty"] = recalledQty > 0.00m ? (object)recalledQty : DBNull.Value,
+                ["recalled_remarks"] = (recalledQty > 0.00m && recalledRemarks != null) ? (object)recalledRemarks : DBNull.Value,
                 ["lpo_number"] = lpo_number ?? (object)DBNull.Value,
                 ["lpo_date"] = lpo_date ?? (object)DBNull.Value,
                 ["lpo_vendor_code"] = lpo_vendor_code ?? (object)DBNull.Value,
