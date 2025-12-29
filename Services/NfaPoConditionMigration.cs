@@ -265,50 +265,44 @@ namespace DataMigration.Services
             }
         }
 
-        public async Task<int> UpdateNfaLineWithAggregatedPoConditionsAsync()
-        {
-            var pgConnectionString = _configuration.GetConnectionString("PostgreSql");
+public async Task<int> UpdateNfaLineWithAggregatedPoConditionsAsync()
+{
+    var pgConnectionString = _configuration.GetConnectionString("PostgreSql");
 
-            if (string.IsNullOrEmpty(pgConnectionString))
-            {
-                throw new InvalidOperationException("PostgreSQL connection string is not configured properly.");
-            }
+    if (string.IsNullOrEmpty(pgConnectionString))
+        throw new InvalidOperationException("PostgreSQL connection string is not configured properly.");
 
-            var updatedRecords = 0;
+    using var pgConnection = new NpgsqlConnection(pgConnectionString);
+    await pgConnection.OpenAsync();
 
-            try
-            {
-                using var pgConnection = new NpgsqlConnection(pgConnectionString);
-                await pgConnection.OpenAsync();
+    _logger.LogInformation(
+        "Setting nfa_line.po_condition_id (int[]) using nfa_po_condition.nfa_po_condition_id values"
+    );
 
-                _logger.LogInformation("Starting post-migration: Updating nfa_line with aggregated po_condition_id values...");
+using var cmd = new NpgsqlCommand(@"
+    UPDATE public.nfa_line nl
+    SET po_condition_id = agg.ids
+    FROM (
+        SELECT
+            nfa_line_id,
+            array_agg(nfa_po_condition_id ORDER BY nfa_po_condition_id) AS ids
+        FROM public.nfa_po_condition
+        GROUP BY nfa_line_id
+    ) agg
+    WHERE nl.nfa_line_id = agg.nfa_line_id
+      AND nl.po_condition_id IS DISTINCT FROM agg.ids;
+", pgConnection);
 
-                // Update nfa_line with comma-separated nfa_po_condition_id values
-                using var cmd = new NpgsqlCommand(@"
-                    UPDATE nfa_line nl
-                    SET po_condition_id = agg.ids
-                    FROM (
-                        SELECT 
-                            nfa_line_id,
-                            string_agg(nfa_po_condition_id::text, ',' ORDER BY nfa_po_condition_id) AS ids
-                        FROM nfa_po_condition
-                        WHERE nfa_line_id IS NOT NULL
-                        GROUP BY nfa_line_id
-                    ) AS agg
-                    WHERE nl.nfa_line_id = agg.nfa_line_id", pgConnection);
 
-                updatedRecords = await cmd.ExecuteNonQueryAsync();
-                
-                _logger.LogInformation($"Post-migration completed. Updated {updatedRecords} nfa_line records with aggregated po_condition_id values");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Post-migration update failed");
-                throw;
-            }
+    var updatedRecords = await cmd.ExecuteNonQueryAsync();
 
-            return updatedRecords;
-        }
+    _logger.LogInformation($"Updated {updatedRecords} nfa_line records");
+
+    return updatedRecords;
+}
+
+
+
 
         public async Task<(int MigratedRecords, int UpdatedRecords)> MigrateAndUpdateAsync()
         {

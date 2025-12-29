@@ -1418,7 +1418,12 @@ public class MigrationController : Controller
             }
             else if (request.Table.ToLower() == "nfapocondition")
             {
-                recordCount = await _nfaPoConditionMigration.MigrateAsync();
+                var (migratedRecords, updatedRecords) = await _nfaPoConditionMigration.MigrateAndUpdateAsync();
+                return Json(new
+                {
+                    success = true,
+                    message = $"Migration completed for nfapocondition. {migratedRecords} records migrated. {updatedRecords} nfa_line records updated with aggregated PO conditions."
+                });
             }
             else if (request.Table.ToLower() == "nfaworkflow")
             {
@@ -2442,8 +2447,8 @@ public class MigrationController : Controller
     {
         try
         {
-            var migratedCount = await _nfaPoConditionMigration.MigrateAsync();
-            return Ok(new { Message = $"Successfully migrated {migratedCount} nfa_po_condition records." });
+            var (migratedRecords, updatedRecords) = await _nfaPoConditionMigration.MigrateAndUpdateAsync();
+            return Ok(new { Message = $"Successfully migrated {migratedRecords} nfa_po_condition records and updated {updatedRecords} nfa_line records with aggregated PO conditions." });
         }
         catch (Exception ex)
         {

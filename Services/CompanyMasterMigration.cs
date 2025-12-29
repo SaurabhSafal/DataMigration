@@ -42,11 +42,13 @@ public class CompanyMasterMigration : MigrationService
             address,
             company_logo_url,
             company_logo_name,
+            sap_secretkey,
             default_currency,
             qty_decimal_places,
             value_decimal_places,
             is_indian_currency,
             date_format,
+            prno_prefix,
             rfq_prefix,
             rfq_length,
             auction_prefix,
@@ -59,6 +61,8 @@ public class CompanyMasterMigration : MigrationService
             workflow_length,
             workflow_version_length,
             participate_terms,
+            time_zone,
+            time_country,
             nfa_prefix,
             nfano_length,
             po_months_validity,
@@ -73,11 +77,13 @@ public class CompanyMasterMigration : MigrationService
             @address,
             @company_logo_url,
             @company_logo_name,
+            @sap_secretkey,
             @default_currency,
             @qty_decimal_places,
             @value_decimal_places,
             @is_indian_currency,
             @date_format,
+            @prno_prefix,
             @rfq_prefix,
             @rfq_length,
             @auction_prefix,
@@ -90,6 +96,8 @@ public class CompanyMasterMigration : MigrationService
             @workflow_length,
             @workflow_version_length,
             @participate_terms,
+            @time_zone,
+            @time_country,
             @nfa_prefix,
             @nfano_length,
             @po_months_validity,
@@ -228,11 +236,13 @@ public class CompanyMasterMigration : MigrationService
                 pgCmd.Parameters.AddWithValue("@address", reader["Address"] ?? DBNull.Value);
                 pgCmd.Parameters.AddWithValue("@company_logo_url", reader["UploadDocument"] ?? DBNull.Value);
                 pgCmd.Parameters.AddWithValue("@company_logo_name", reader["DocumentName"] ?? DBNull.Value);
+                pgCmd.Parameters.AddWithValue("@sap_secretkey", "EbYThgK/jmJ5DL8XW6xPwQTyogX/CYjGpi91tc4Z7rv4Wnncg6VDsmxgKvV2Tl7aPwVu8Cj6iF7Ll3OfQYsTgw==");
                 pgCmd.Parameters.AddWithValue("@default_currency", "INR");
                 pgCmd.Parameters.AddWithValue("@qty_decimal_places", 3);
                 pgCmd.Parameters.AddWithValue("@value_decimal_places", 2);
                 pgCmd.Parameters.AddWithValue("@is_indian_currency", true);
                 pgCmd.Parameters.AddWithValue("@date_format", "dd/MM/yyyy");
+                pgCmd.Parameters.AddWithValue("@prno_prefix", "PR");
                 pgCmd.Parameters.AddWithValue("@rfq_prefix", "R");
                 pgCmd.Parameters.AddWithValue("@rfq_length", 4);
                 pgCmd.Parameters.AddWithValue("@auction_prefix", "A");
@@ -244,12 +254,14 @@ public class CompanyMasterMigration : MigrationService
                 pgCmd.Parameters.AddWithValue("@workflow_prefix", "WF/");
                 pgCmd.Parameters.AddWithValue("@workflow_length", 5);
                 pgCmd.Parameters.AddWithValue("@workflow_version_length", 3);
-                pgCmd.Parameters.AddWithValue("@participate_terms", "");
+                pgCmd.Parameters.AddWithValue("@participate_terms", "In consideration of the opportunity to participate in on-line events ('On-Line Events') held and conducted by the company sponsoring this On-Line Event ('Sponsor') on the web site (this 'Site') hosted by SAFAL, Procuresens. ('Site Owner'), your company ('Participant' or 'You') agrees to the following terms and conditions ('Bidder Agreement'):\n\n1. Bids: If You are invited to participate in the On-Line Event, Sponsor reserves the right to amend, modify or withdraw this On-Line Event. Sponsor reserves the right to accept or reject all or part of your proposal. Submission of a bid does not create a contract or any expectation by Participant of a future business relationship...\n\n14. Survival: The terms and conditions of this Bidder Agreement shall survive completion of the On-Line Event.");
+                pgCmd.Parameters.AddWithValue("@time_zone", "(UTC+05:30) India Standard Time (Kolkata)");
+                pgCmd.Parameters.AddWithValue("@time_country", "India");
                 pgCmd.Parameters.AddWithValue("@nfa_prefix", "");
                 pgCmd.Parameters.AddWithValue("@nfano_length", 6);
                 pgCmd.Parameters.AddWithValue("@po_months_validity", 12);
                 pgCmd.Parameters.AddWithValue("@time_format", "hh:mm tt");
-                pgCmd.Parameters.AddWithValue("@site_url", "");
+                pgCmd.Parameters.AddWithValue("@site_url", "https://dev.apps.procuresens.com/");
 
                 int result = await pgCmd.ExecuteNonQueryAsync();
                 if (result > 0) insertedCount++;
