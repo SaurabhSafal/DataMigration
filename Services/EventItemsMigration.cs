@@ -132,10 +132,10 @@ ON CONFLICT (event_item_id) DO UPDATE SET
             new { source = "PBID", logic = "PBID -> event_item_id (Direct)", target = "event_item_id" },
             new { source = "EVENTID", logic = "EVENTID -> event_id (Direct from EventMaster)", target = "event_id" },
             new { source = "PRTRANSID", logic = "PRTRANSID -> erp_pr_lines_id (Direct from ErpPrLines)", target = "erp_pr_lines_id" },
-            new { source = "erp_pr_lines", logic = "MaterialCode from erp_pr_lines (Lookup)", target = "material_code" },
-            new { source = "erp_pr_lines", logic = "MaterialShortText from erp_pr_lines (Lookup)", target = "material_short_text" },
-            new { source = "erp_pr_lines", logic = "MaterialItemText from erp_pr_lines (Lookup)", target = "material_item_text" },
-            new { source = "erp_pr_lines", logic = "MaterialPoDescription from erp_pr_lines (Lookup)", target = "material_po_description" },
+            new { source = "TBL_PRTRANSACTION", logic = "ItemCode from TBL_PRTRANSACTION (Lookup by PRTRANSID)", target = "material_code" },
+            new { source = "TBL_PRTRANSACTION", logic = "ItemName from TBL_PRTRANSACTION (Lookup by PRTRANSID)", target = "material_short_text" },
+            new { source = "TBL_PRTRANSACTION", logic = "ITEM_DESCRIPTION from TBL_PRTRANSACTION (Lookup by PRTRANSID)", target = "material_item_text" },
+            new { source = "TBL_PRTRANSACTION", logic = "MaterialPODescription from TBL_PRTRANSACTION (Lookup by PRTRANSID)", target = "material_po_description" },
             new { source = "uom_master", logic = "UomId from uom_master (Lookup)", target = "uom_id" },
             new { source = "erp_pr_lines", logic = "UomCode from erp_pr_lines (Lookup)", target = "uom_code" },
             new { source = "ClientSAPId", logic = "ClientSAPId -> company_id (Direct from Clinet SAP Master)", target = "company_id" },
@@ -250,9 +250,9 @@ ON CONFLICT (event_item_id) DO UPDATE SET
         // Load UOM master data for UOM ID lookup
         var uomMasterData = await LoadUomMasterDataAsync(pgConn, transaction);
         _logger.LogInformation($"Loaded {uomMasterData.Count} UOM records for lookup.");
-        // Load ERP PR lines data for material lookups
-        var erpPrLinesData = await LoadErpPrLinesDataAsync(pgConn, transaction);
-        _logger.LogInformation($"Loaded {erpPrLinesData.Count} ERP PR lines for lookup.");
+        // Load PRTRANSACTION data for material lookups
+        var prTransactionMaterialData = await LoadPrTransactionMaterialDataAsync(sqlConn);
+        _logger.LogInformation($"Loaded {prTransactionMaterialData.Count} PRTRANSACTION records for material lookup.");
 
         using var selectCmd = new SqlCommand(SelectQuery, sqlConn);
         selectCmd.CommandTimeout = 300;
@@ -323,21 +323,22 @@ ON CONFLICT (event_item_id) DO UPDATE SET
                 continue;
             }
 
-            // Populate material fields from erp_pr_lines lookup if available
-            ErpPrLineData? prLine = null;
+            // Populate material fields from TBL_PRTRANSACTION lookup if available
+            string? materialCode = null;
+            string? materialShortText = null;
+            string? materialItemText = null;
+            string? materialPoDescription = null;
             if (prTransId != DBNull.Value)
             {
                 int prIdVal = Convert.ToInt32(prTransId);
-                if (erpPrLinesData.ContainsKey(prIdVal))
+                if (prTransactionMaterialData.TryGetValue(prIdVal, out var matData))
                 {
-                    prLine = erpPrLinesData[prIdVal];
+                    materialCode = matData.ItemCode;
+                    materialShortText = matData.ItemName;
+                    materialItemText = matData.ItemDescription;
+                    materialPoDescription = matData.MaterialPoDescription;
                 }
             }
-
-            var materialCode = prLine?.MaterialCode;
-            var materialShortText = prLine?.MaterialShortText;
-            var materialItemText = prLine?.MaterialItemText;
-            var materialPoDescription = prLine?.MaterialPoDescription;
 
             // Determine item_type: Material if material_code exists, otherwise Service
             string itemTypeValue = !string.IsNullOrEmpty(materialCode) ? "Material" : "Service";
@@ -466,26 +467,27 @@ ON CONFLICT (event_item_id) DO UPDATE SET
         return insertedCount;
     }
 
-    private async Task<Dictionary<int, ErpPrLineData>> LoadErpPrLinesDataAsync(NpgsqlConnection pgConn, NpgsqlTransaction? transaction)
+    private async Task<Dictionary<int, PrTransactionMaterialData>> LoadPrTransactionMaterialDataAsync(SqlConnection sqlConn)
     {
-        var data = new Dictionary<int, ErpPrLineData>();
-        var query = @"SELECT erp_pr_lines_id, material_code, material_short_text, material_item_text, 
-                      material_po_description, uom_code FROM erp_pr_lines";
+        var data = new Dictionary<int, PrTransactionMaterialData>();
+        var query = @"SELECT PRTRANSID, ItemCode, ItemName, ITEM_DESCRIPTION, MaterialPODescription FROM TBL_PRTRANSACTION WHERE PRTRANSID IS NOT NULL";
 
-        using var cmd = new NpgsqlCommand(query, pgConn, transaction);
+        using var cmd = new SqlCommand(query, sqlConn);
         using var reader = await cmd.ExecuteReaderAsync();
 
         while (await reader.ReadAsync())
         {
-            var id = reader.GetInt32(0);
-            data[id] = new ErpPrLineData
+            var id = reader["PRTRANSID"] != DBNull.Value ? Convert.ToInt32(reader["PRTRANSID"]) : 0;
+            if (id > 0)
             {
-                MaterialCode = reader.IsDBNull(1) ? null : reader.GetString(1),
-                MaterialShortText = reader.IsDBNull(2) ? null : reader.GetString(2),
-                MaterialItemText = reader.IsDBNull(3) ? null : reader.GetString(3),
-                MaterialPoDescription = reader.IsDBNull(4) ? null : reader.GetString(4),
-                UomCode = reader.IsDBNull(5) ? null : reader.GetString(5)
-            };
+                data[id] = new PrTransactionMaterialData
+                {
+                    ItemCode = reader["ItemCode"] != DBNull.Value ? reader["ItemCode"].ToString() : null,
+                    ItemName = reader["ItemName"] != DBNull.Value ? reader["ItemName"].ToString() : null,
+                    ItemDescription = reader["ITEM_DESCRIPTION"] != DBNull.Value ? reader["ITEM_DESCRIPTION"].ToString() : null,
+                    MaterialPoDescription = reader["MaterialPODescription"] != DBNull.Value ? reader["MaterialPODescription"].ToString() : null
+                };
+            }
         }
 
         return data;
@@ -629,12 +631,11 @@ ON CONFLICT (event_item_id) DO UPDATE SET
         return result;
     }
 
-    private class ErpPrLineData
+    private class PrTransactionMaterialData
     {
-        public string? MaterialCode { get; set; }
-        public string? MaterialShortText { get; set; }
-        public string? MaterialItemText { get; set; }
+        public string? ItemCode { get; set; }
+        public string? ItemName { get; set; }
+        public string? ItemDescription { get; set; }
         public string? MaterialPoDescription { get; set; }
-        public string? UomCode { get; set; }
     }
 }
