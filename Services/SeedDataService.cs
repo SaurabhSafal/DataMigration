@@ -454,20 +454,7 @@ namespace DataMigration.Services
 
         private async Task<int> SeedUserAuditActionAsync(NpgsqlConnection pgConn, List<string> seedTables)
         {
-            // Create table if it doesn't exist
-            var createTableQuery = @"
-                CREATE TABLE IF NOT EXISTS user_audit_actionss (
-                    id INTEGER PRIMARY KEY,
-                    action_name VARCHAR(255) NOT NULL,
-                    action_description TEXT,
-                    action_type VARCHAR(100)
-                )";
-            
-            using var createCmd = new NpgsqlCommand(createTableQuery, pgConn);
-            await createCmd.ExecuteNonQueryAsync();
-            _logger.LogInformation("Ensured user_audit_actions table exists");
-
-            var checkQuery = "SELECT COUNT(*) FROM user_audit_actionss";
+            var checkQuery = "SELECT COUNT(*) FROM user_audit_actions";
             using var checkCmd = new NpgsqlCommand(checkQuery, pgConn);
             var count = Convert.ToInt32(await checkCmd.ExecuteScalarAsync());
 
@@ -538,7 +525,7 @@ namespace DataMigration.Services
             foreach (var action in userAuditActions)
             {
                 var insertQuery = @"
-                    INSERT INTO user_audit_actionss (id, action_name, action_description, action_type)
+                    INSERT INTO user_audit_actions (id, action_name, action_description, action_type)
                     VALUES (@id, @actionName, @actionDescription, @actionType)
                     ON CONFLICT (id) DO NOTHING";
 
@@ -563,7 +550,7 @@ namespace DataMigration.Services
             foreach (var action in nullTypeActions)
             {
                 var insertQuery = @"
-                    INSERT INTO user_audit_actionss (id, action_name, action_description, action_type)
+                    INSERT INTO user_audit_actions (id, action_name, action_description, action_type)
                     VALUES (@id, @actionName, @actionDescription, NULL)
                     ON CONFLICT (id) DO NOTHING";
 
